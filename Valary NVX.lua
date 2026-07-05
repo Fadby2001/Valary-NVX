@@ -390,14 +390,25 @@ do -- FrameWork
         local Black_UI = nil;
 
         --LPH_NO_VIRTUALIZE(function()
-            for Index, Value in next, Garbage do 
-                if typeof(Value) == 'table' and typeof(rawget(Value, "Homeless")) == 'table' and rawget(Value, "NPCs") then 
-                    if rawget(Value.Homeless, "MaxDistance") then 
-                        Value.Homeless.MaxDistance = 9e9
-                        Value.NPCs.MaxDistance = 9e9
-                    end
+           local Garbage = getgc(true) -- Fallback if getgc() is used in your environment
+
+if typeof(Garbage) == 'table' then
+    for Index, Value in next, Garbage do 
+        if typeof(Value) == 'table' and typeof(rawget(Value, "Homeless")) == 'table' and rawget(Value, "NPCs") ~= nil then 
+            local homelessTable = rawget(Value, "Homeless")
+            local npcsTable = rawget(Value, "NPCs")
+            
+            if typeof(homelessTable) == 'table' and rawget(homelessTable, "MaxDistance") then 
+                rawset(homelessTable, "MaxDistance", 9e9)
+                if typeof(npcsTable) == 'table' then
+                    rawset(npcsTable, "MaxDistance", 9e9)
                 end
             end
+        end
+    end
+else
+    warn("Garbage variable is nil or not a valid table!")
+end
         --end)()
         
         pcall(function()
