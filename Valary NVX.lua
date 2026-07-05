@@ -4,557 +4,66 @@ end
 
 getgenv().NVX_loaded = true
 
+-- LPH Stubs (compatibilidad)
 if LPH_OBFUSCATED == nil then
-    local assert = assert
-    local type = type
-    local setfenv = setfenv
-    LPH_ENCNUM = function(toEncrypt, ...)
-        assert(type(toEncrypt) == "number" and #{...} == 0, "LPH_ENCNUM only accepts a single constant double or integer as an argument.")
-        return toEncrypt
-    end
+    LPH_ENCNUM = function(n) return n end
     LPH_NUMENC = LPH_ENCNUM
-    LPH_ENCSTR = function(toEncrypt, ...)
-        assert(type(toEncrypt) == "string" and #{...} == 0, "LPH_ENCSTR only accepts a single constant string as an argument.")
-        return toEncrypt
-    end
+    LPH_ENCSTR = function(s) return s end
     LPH_STRENC = LPH_ENCSTR
-    LPH_ENCFUNC = function(toEncrypt, encKey, decKey, ...)
-        
-        assert(type(toEncrypt) == "function" and type(encKey) == "string" and #{...} == 0, "LPH_ENCFUNC accepts a constant function, constant string, and string variable as arguments.")
-        return toEncrypt
-    end
+    LPH_ENCFUNC = function(f) return f end
     LPH_FUNCENC = LPH_ENCFUNC
-    LPH_JIT = function(f, ...)
-        assert(type(f) == "function" and #{...} == 0, "LPH_JIT only accepts a single constant function as an argument.")
-        return f
-    end
+    LPH_JIT = function(f) return f end
     LPH_JIT_MAX = LPH_JIT
-    LPH_NO_VIRTUALIZE = function(f, ...)
-        assert(type(f) == "function" and #{...} == 0, "LPH_NO_VIRTUALIZE only accepts a single constant function as an argument.")
-        return f
-    end
-    LRM_INIT_SCRIPT = function(f)
-        return f()
-    end
-    LPH_NO_UPVALUES = function(f, ...)
-        assert(type(setfenv) == "function", "LPH_NO_UPVALUES can only be used on Lua versions with getfenv & setfenv")
-        assert(type(f) == "function" and #{...} == 0, "LPH_NO_UPVALUES only accepts a single constant function as an argument.")
-        local env = getrenv()
-        return setfenv(
-            LPH_NO_VIRTUALIZE(function(...)
-                return func(...)
-            end),
-            setmetatable(
-                {
-                    func = f
-                },
-                {
-                    __index = env,
-                    __newindex = env
-                }
-            )
-        )
-    end
-    LPH_CRASH = function(...)
-        assert(#{...} == 0, "LPH_CRASH does not accept any arguments.")
-        game:Shutdown()
-        while true do end
-    end
-    LRM_IsUserPremium = false
-    LRM_LinkedDiscordID = "1096603799159832636"
-    LRM_ScriptName = "NVX"
-    LRM_TotalExecutions = 0
-    LRM_SecondsLeft = math.huge
-    LRM_UserNote = "Developer";
-end;
+    LPH_NO_VIRTUALIZE = function(f) return f end
+    LRM_INIT_SCRIPT = function(f) return f() end
+    LPH_CRASH = function() end
+end
 
 LRM_INIT_SCRIPT(function()
     task.wait(1)
-
-    if not game:IsLoaded() then
-        game.Loaded:Wait()
-    end
-
+    if not game:IsLoaded() then game.Loaded:Wait() end
     if not game:GetService("Players").LocalPlayer.Character then 
         game:GetService("Players").LocalPlayer.CharacterAdded:Wait()
     end
-
-    if not getgenv().rejoined_and_farming then
-        repeat task.wait(0.1) until game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("IntroUI") == nil
-    else
-        task.wait(60)
-    end
-
-    if game.PlaceId ~= 15124180230 then
-        local RunService = game:GetService("RunService")
-
-        local Success, Function = xpcall(function()
-            local Function = filtergc("function", {StartLine = 4262, IgnoreExecutor = true}, true)
-
-            if not Function or typeof(Function) ~= "function" then
-                return error() 
-            end
-
-            return Function
-        end, function()
-            local Function = nil;
-
-            for Index, Value in getgc() do
-                if typeof(Value) == "function" and not iscclosure(Value) then
-                    if debug.info(Value, 'l') == 4262 then
-                        Function = Value
-
-                        break
-                    end
-                end
-            end
-
-            if not Function or typeof(Function) ~= "function" then
-                return error() 
-            end
-
-            return Function
-        end)
-
-        if not Success and (not Function or typeof(Function) ~= "function") then
-            game:GetService("Players").LocalPlayer:Kick("Valary.gg | Anti-Cheat was updated! Wait for script update, you can not use it at this moment.")
-            task.wait(9e9)
-        end
-
-        debug.setupvalue(Function, 4, 0/0)
-
-        task.spawn(function()
-            while RunService.Stepped:Wait() do
-                debug.setupvalue(Function, 4, 0/0)					
-            end
-        end)
-    end
-
-    if getgenv().rejoined_and_farming then
-        getconnections(game:GetService("Players").LocalPlayer.PlayerGui.IntroUI.SurfaceGui.Frame.Play.MouseButton1Click)[1]:Fire()
-
-        task.wait(10)
-    end
 end)
-
-if not isfile('ValaryGG_RejoinerSettings.txt') then
-    writefile('ValaryGG_RejoinerSettings.txt', '')
-end
 
 local LoadingTick = os.clock()
-
 local LocalPlayer = game:GetService("Players").LocalPlayer
-
 local Console_Server = game.PlaceId == 15124180230
 
-do -- Hyphon Emulation
-    local Hyphon_Script = nil;
-    local OWpCsbCTXfeDG = filtergc('function', {IgnoreExecutor = true, Name = "OWpCsbCTXfeDG"}, true)
-
-    for Index, Value in pairs(getnilinstances()) do
-        if Value:IsA("Script") and Value.Name:len() == 32 then
-            Hyphon_Script = Value
-        end
-    end
-
-    if not shared.Emulation_Loaded and (Hyphon_Script or OWpCsbCTXfeDG) then
-        if not OWpCsbCTXfeDG then
-            return LocalPlayer:Kick("EMULATOR ERROR : 'OWpCsbCTXfeDG' NOT FOUND!")
-        end
-
-        local Function_2247, V5_Function = filtergc('function', {StartLine = 2247, Source = debug.info(OWpCsbCTXfeDG, "s")}, true), filtergc('function', {StartLine = 2823, Source = debug.info(OWpCsbCTXfeDG, "s")}, true)
-
-        local SecondArgument_Token = nil
-        local Last_RemoteFunction_Call = nil
-        local Last_Hyphon_Check = nil
-
-        do
-            _InvokeServer = nil
-            _InvokeServer = hookfunction(Instance.new("RemoteFunction", nil).InvokeServer, newcclosure(function(Self, ...)
-                if Self.Name:len() == 3 then
-                    Last_RemoteFunction_Call = tick();
-                    SecondArgument_Token = select(1, ...)[2]
-                else
-                    return _InvokeServer(Self, ...)
-                end
-                
-                return _InvokeServer(Self, ...)
-            end))
-
-            _FireServer = nil
-            _FireServer = hookfunction(Instance.new("RemoteEvent", nil).FireServer, newcclosure(function(Self, ...)
-                if Self and Self.Name == "Hyphon_Check" then
-                    Last_Hyphon_Check = tick()
-                else
-                    return _FireServer(Self, ...)
-                end
-                
-                return _FireServer(Self, ...)
-            end))
-
-            repeat task.wait() until Last_RemoteFunction_Call ~= nil and Last_Hyphon_Check ~= nil
-        end
-
-        local Emulator = setmetatable({    
-            Encode = (function()
-                for Index, Value in filtergc('function', {Source = debug.info(OWpCsbCTXfeDG, "s"), StartLine = 2022}) do
-                    local Success, Result = pcall(function() return clonefunction(Value)("a") end)
-
-                    if Success and string.find(Result, "++") then
-                        return Value
-                    end
-                end
-            end)();
-            
-            Decode = (function()
-                for Index, Value in filtergc('function', {Source = debug.info(OWpCsbCTXfeDG, "s"), StartLine = 2054}) do
-                    local Success, Result = pcall(function() return Value("^Vh#D(*kj#92=++ProtectedByHyphon") end)
-                    
-                    if Success and Result == "a" then
-                        return Value
-                    end
-                end
-            end)();
-
-            fake_dec = getfenv(OWpCsbCTXfeDG).fake_dec;
-
-            Tablets = {[1] = nil, [2] = nil, [3] = nil, [4] = nil, [5] = nil, [6] = nil};
-            SSL = 192429429429 - game.PlaceVersion / LocalPlayer.UserId + game.PlaceVersion;
-
-            Handshake_V5 = (function()
-                return tostring(select(2, pcall(debug.getupvalue, V5_Function, 42)))
-            end)();
-
-            Remote = (function()
-                return select(2, pcall(debug.getupvalue, Function_2247, 2))
-            end)();
-
-            FirstArgument_Token = (function()
-                return select(2, pcall(debug.getupvalue, Function_2247, 3))
-            end)();
-
-            SecondArgument_Token = (function()
-                return select(2, pcall(debug.getupvalue, Function_2247, 4))
-            end)();
-
-            SixthArgument_Key = (function()
-                return select(2, pcall(debug.getupvalue, Function_2247, 16))
-            end)();
-
-            TenthArgument_Table = (function()
-                if select(2, pcall(debug.getupvalue, Function_2247, 20)) and typeof(select(2, pcall(debug.getupvalue, Function_2247, 20))) == 'userdata' then
-                    return debug.getupvalue(Function_2247, 20)[debug.getupvalue(Function_2247, 21)]
-                else
-                    return warn("EMULATOR ERROR : TENTH TABLE UPVALUES FAILED!")
-                end
-            end)();
-
-            Eleventh_Token = (function()
-                return select(2, pcall(debug.getupvalue, Function_2247, 22))
-            end)();
-
-            Current_Number = (function()
-                return select(2, pcall(debug.getupvalue, Function_2247, 7))
-            end)();
-
-            Hyphon_Script = (function()
-                for Index, Value in pairs(getnilinstances()) do
-                    if Value:IsA("Script") and Value.Name:len() == 32 then
-                        return Value
-                    end
-                end
-            end)();
-
-            Hyphon_Check = (function()
-                return cloneref(game:GetService("MemoryStoreService")):FindFirstChild("Hyphon_Check")
-            end)();
-
-            Last_RemoteFunction_Call = Last_RemoteFunction_Call;
-            Last_Hyphon_Check = Last_Hyphon_Check;
-
-            Logs = {
-                Enabled = false;
-                Method = "Terminal";
-            };
-        }, {})
-
-        if typeof(Emulator.Remote) ~= "Instance" or Emulator.Handshake_V5:len() > 4 or typeof(Emulator.TenthArgument_Table) ~= "table" then
-            return LocalPlayer:Kick(string.format("EMULATOR ERROR : UPVALUES / FUNCTIONS HAVE CHANGED! %s %s %s", tostring(typeof(Emulator.Remote) ~= "Instance"), tostring(Emulator.Handshake_V5:len() > 4), tostring(typeof(Emulator.TenthArgument_Table) ~= "table")))
-        end
-
-        loadstring([[
-            local _Script_ = nil;
-
-            for Index, Value in pairs(getnilinstances()) do
-                if Value:IsA("Script") and Value.Name:len() == 32 then
-                    _Script_ = Value
-                end
-            end
-
-            if not _Script_ then
-                game:GetService("Players").LocalPlayer:Kick("EMULATOR ERROR : AC Script Couldn't Be Found.")
-                task.wait(9e9)
-            end
-
-            local Bit_32; Bit_32 = hookfunction(bit32.bxor, function(...) 
-                local Caller_Script = getcallingscript()
-
-                if not checkcaller() and Caller_Script == _Script_ then
-                    return task.wait(9e9)
-                else
-                    return Bit_32(...)
-                end
-
-                return Bit_32(...)
-            end)
-        ]])()
-
-        -- \\ Tablets
-            local Get_Tablets = function()
-                local Cache = {}
-
-                for Index, Value in Emulator.Tablets do
-                    table.insert(Cache, Value)
-                end
-
-                return Cache
-            end
-
-            for Index, Value in debug.getupvalues(Function_2247) do
-                if Index == 24 then
-                    Emulator.Tablets[1] = Value
-                elseif Index == 25 then
-                    Emulator.Tablets[2] = Value
-                elseif Index == 26 then
-                    Emulator.Tablets[3] = Value
-                elseif Index == 27 then
-                    Emulator.Tablets[4] = Value
-                elseif Index == 28 then
-                    Emulator.Tablets[5] = Value
-                elseif Index == 29 then
-                    Emulator.Tablets[6] = Value
-                end
-            end
-
-            task.spawn(function()
-                while task.wait(9) do
-                    Emulator.Tablets[1] = tick()
-                end
-            end)
-
-            task.spawn(function()
-                while task.wait(9) do
-                    Emulator.Tablets[2] = tick()
-                end
-            end)
-
-            task.spawn(function()
-                while task.wait(10) do
-                    Emulator.Tablets[3] = tick()
-                end
-            end)
-
-            task.spawn(function()
-                while task.wait(4) do
-                    Emulator.Tablets[4] = tick()
-                end
-            end)
-        -- \\ Tablets
-
-        local v3020 = nil; for Index, Value in filtergc("function", {Upvalues = {LocalPlayer}, Source = debug.info(OWpCsbCTXfeDG, "s")}) do
-            if type(debug.getupvalue(Value, 1)) == 'function' then
-                if type(debug.getupvalue(Value, 3)) == 'table' then
-                    v3020 = Value; break
-                end
-            end
-        end
-
-        local _2102 = filtergc("function", {StartLine = 2102, IgnoreExecutor = true}, true)
-
-        if not v3020 or not _2102 then
-            return LocalPlayer:Kick("EMULATOR ERROR : v3020/-2102 NOT FOUND!")
-        end
-
-        Emulator.Remote.OnClientInvoke = LPH_JIT_MAX(function(...)
-            Emulator.SecondArgument_Token = Emulator.Decode(select(1, ...), 2982249285729)
-
-            local v297 = math.floor(workspace:GetServerTimeNow() / 8) % 87 / 78
-            local v298 = math.floor(math.noise(Emulator.SSL + v297, LocalPlayer.UserId, 0) * 628)
-
-            local Return_Table = {
-                debug.getupvalue(_2102, 26),
-                Emulator.Encode("Hyphon-," .. tostring(math.random(242, 789)) .. "{ Date (Data: " .. tostring(math.random(1, 9)) .. ")"),
-                Emulator.fake_dec(select(3, ...), tostring(LocalPlayer.UserId)),
-                v3020(v298),
-                Emulator.Encode(tostring(Workspace:GetServerTimeNow())),
-                {
-                    CI = Emulator.Encode(tostring(tick())),
-                    TL = Get_Tablets(),
-                    GL = nil,
-                    LS = 3 + game.PlaceVersion
-                }
-            }
-
-            return unpack(Return_Table)
-        end)
-
-        task.spawn(LPH_JIT_MAX(function()
-            task.wait(tick() - Emulator.Last_Hyphon_Check)
-
-            while true do
-                Emulator.Hyphon_Check:FireServer(tick(), Emulator.Handshake_V5 .. "Handshake_V5")
-                task.wait(0.1)
-                Emulator.Hyphon_Check:FireServer()
-                task.wait(9)
-            end
-        end))
-
-        task.spawn(LPH_JIT_MAX(function()
-            while task.wait(35) do
-                Emulator.Tablets[5] = tick() - 0.5
-                Emulator.Tablets[6] = tick()
-
-                if tostring(Emulator.Current_Number) == "0" then
-                    Emulator.Current_Number = "1"
-                elseif tostring(Emulator.Current_Number) == "1" then
-                    Emulator.Current_Number = "2"
-                elseif tostring(Emulator.Current_Number) == "2" then
-                    Emulator.Current_Number = "0"
-                end
-
-                if not Emulator.SecondArgument_Token or typeof(Emulator.SecondArgument_Token) ~= "string" then
-                    Emulator.SecondArgument_Token = debug.getupvalue(Function_2247, 4)
-                end
-
-                Emulator.Remote:InvokeServer({
-                    Emulator.FirstArgument_Token,
-                    Emulator.SecondArgument_Token,
-                    nil,
-                    Emulator.Encode(tostring(Emulator.Current_Number)),
-                    "Hooks detected: _1__index",
-                    Emulator.SixthArgument_Key,
-                    "Hooked",
-                    Emulator.Encode(tostring(os.time())),
-                    tick(),
-                    Emulator.TenthArgument_Table,
-                    Emulator.Eleventh_Token,
-                    {
-                        CurrentTick = Emulator.Encode(tostring(tick())),
-                        Tablets = Get_Tablets()
-                    },
-                    {
-                        LuaFunction = {
-                            true,
-                            function()
-                                
-                            end,
-                            string.format("Players.%s.PlayerGui.%s", LocalPlayer.Name, Emulator.Hyphon_Script.Name),
-                            2266,
-                            "",
-                            0,
-                            true
-                        },
-
-                        SSL = Emulator.SSL,
-                        ["Metatable code"] = Emulator.Encode("nil"),
-                    }
-                })
-
-                if Emulator.Logs.Enabled then
-                    if Emulator.Logs.Method == "Terminal" then
-                        rconsoleprint(string.format("[HYPHON EMULATOR] : SENT DATA [%s %s] AT %s", Emulator.Remote.Name, Emulator.SecondArgument_Token, os.date("%X")))
-                    else
-                        print(string.format("[HYPHON EMULATOR] : SENT DATA [%s %s] AT %S", Emulator.Remote.Name, Emulator.SecondArgument_Token, os.date("%X")))
-                    end
-                end
-            end
-        end))
-
-        shared.Emulation_Loaded = true
-    end
-end
-
-local Garbage = getgc(true)
-
-local FireServer, InvokeServer, UnreliableFireServer = Instance.new("RemoteEvent").FireServer, Instance.new("RemoteFunction").InvokeServer, Instance.new("UnreliableRemoteEvent").FireServer
-
-local Services = setmetatable({}, {
-    __index = LPH_NO_VIRTUALIZE(function(self, service, key)
-        return cloneref(game:GetService(service))
-    end)
-})  
-
-local fireproximityprompt = fireproximityprompt
-
-if string.find(getexecutorname(), "Bunni") then
-    fireproximityprompt = LPH_JIT_MAX(function(Prompt)
-        local prompt_settings = {["HoldDuration"] = Prompt.HoldDuration; ["RequiresLineOfSight"] = Prompt.RequiresLineOfSight};
-
-        Prompt.HoldDuration = 0; Prompt.RequiresLineOfSight = false;
-
-        Prompt:InputHoldBegin()
-
-        task.wait(Prompt.HoldDuration)
-
-        Prompt:InputHoldEnd()
-
-        for Index, Value in prompt_settings do
-            Prompt[Index] = Value
-        end
-    end)
-end
-
-local Library = {Friendly_Players = {}, Priority_Players = {}, Selected_Player = nil}
-
-local Volcano = string.find(getexecutorname():lower(), "volcano") ~= nil
-
-pcall(function()
-    for Index, Value in getconnections(gethui().ChildRemoved) do
-        Value:Disable()
-    end
-end)
-
+-- ==================== CONFIG ====================
 local Config = {
-    ["Fake_Part"] = nil;
-    ["Gun_Handle"] = nil;
-    ["NVX_Users"] = {};
-    ["Whitelisted_People"] = {};
+    ["Gun_Handle"] = nil,
+    ["NVX_Users"] = {},
+    ["Whitelisted_People"] = {},
 
-    ["Spread"] = {Enabled = false; Reduce = 100};
-    ["Fire_Rate"] = {Enabled = false; Increase = 2;};
-    ["One Tap"] = {Enabled = false;};
-    ["Recoil"] = {Enabled = false; Reduce = 100;};
-    ["No Jam"] = {Enabled = false};
-    ["Instant Reload"] = {Enabled = false;};
-    ["Instant Bullet"] = {Enabled = false;};
-    ["Force Auto"] = {Enabled = false};
-    ["Infinite Ammo"] = {Enabled = false;};
-    ["Instant Equip"] = {Enabled = false;};
+    ["Spread"] = {Enabled = false; Reduce = 100},
+    ["Fire_Rate"] = {Enabled = false; Increase = 2},
+    ["One Tap"] = {Enabled = false},
+    ["Recoil"] = {Enabled = false; Reduce = 100},
+    ["No Jam"] = {Enabled = false},
+    ["Instant Reload"] = {Enabled = false},
+    ["Instant Bullet"] = {Enabled = false},
+    ["Force Auto"] = {Enabled = false},
+    ["Infinite Ammo"] = {Enabled = false},
+    ["Instant Equip"] = {Enabled = false},
 
     ["VehicleModifications"] = {
-        ["SpeedEnabled"] = false;
-        ["SpeedValue"] = 10/1000;
-        ["BreakEnabled"] = false;
-        ["BreakValue"] = 50/1000;
-        ["InstantStop"] = false;
-        ["InstantStopBind"] = Enum.KeyCode.V;
-    };
-
-    ["Rejoiner"] = {
-        ['Enabled'] = false;
-        ['KillAura'] = false;
-        ['AutoBuyGun'] = false;
-    };
-
-    ["ATM_BALANCE"] = 'N/A';
+        ["SpeedEnabled"] = false,
+        ["SpeedValue"] = 10/1000,
+        ["BreakEnabled"] = false,
+        ["BreakValue"] = 50/1000,
+        ["InstantStop"] = false,
+        ["InstantStopBind"] = Enum.KeyCode.V,
+    },
 
     ["Tracers"] = {
-        ["Enabled"] = false;
-        ["Duration"] = 3;
-        ["StartColor"] = Color3.fromRGB(255, 85, 0);
-        ["EndColor"] = Color3.fromRGB(0, 0, 0);
-        ["Rainbow"] = false;
-    };
+        ["Enabled"] = false,
+        ["Duration"] = 3,
+        ["StartColor"] = Color3.fromRGB(255, 85, 0),
+        ["EndColor"] = Color3.fromRGB(0, 0, 0),
+        ["Rainbow"] = false,
+    },
 
     ["Hit_Sounds"] = {
         ["Neverlose"] = "rbxassetid://8726881116",
@@ -570,191 +79,156 @@ local Config = {
         ["Bruh"] = "rbxassetid://4275842574",
         ["Bamboo"] = "rbxassetid://3769434519",
         ["Steve"] = "rbxassetid://4965083997"
-    };
+    },
 
     ["Hit_Sounds_Settings"] = {
-        ["Enabled"] = false;
-        ["Volume"] = 5;
-        ["Selected"] = "Neverlose";
-        ["HideNormalSounds"] = false;
-    };
+        ["Enabled"] = false,
+        ["Volume"] = 5,
+        ["Selected"] = "Neverlose",
+        ["HideNormalSounds"] = false,
+    },
 
     ["Hitbox_Expander"] = {
-        ["Enabled"] = false;
-        ["Multiplier"] = 15;
-        ["SafeZoneCheck"] = false;
-        ["Color"] = Color3.new(1,1,1);
-        ["Transparency"] = 0.5;
-        ["Type"] = "Block";
-        ["Material"] = "ForceField";
-        ["Part"] = "Head";
-    };
+        ["Enabled"] = false,
+        ["Multiplier"] = 15,
+        ["SafeZoneCheck"] = false,
+        ["Color"] = Color3.new(1,1,1),
+        ["Transparency"] = 0.5,
+        ["Type"] = "Block",
+        ["Material"] = "ForceField",
+        ["Part"] = "Head",
+    },
 
     ["WorldVisuals"] = {
-        ["SaturationEnabled"] = false;
-        ["Saturation_Value"] = 1;
-
-        ["StretchEnabled"] = false;
-        ["StretchValue"] = 0.7;
-
-        ["FogColorEnabled"] = false;
-        ["FogColor"] = Color3.new(1,1,1);
-
-        ["AmbientEnabled"] = false;
-        ["AmbientColor"] = Color3.new(1,1,1);
-
-        ["FieldOfViewEnabled"] = false;
-        ["FieldOfViewValue"] = 70;
-
-        ["Fullbright"] = false;
-    };
-
-    ["Gun_Held"] = false;
-
-    ["Connections"] = {};
+        ["SaturationEnabled"] = false,
+        ["Saturation_Value"] = 1,
+        ["StretchEnabled"] = false,
+        ["StretchValue"] = 0.7,
+        ["FogColorEnabled"] = false,
+        ["FogColor"] = Color3.new(1,1,1),
+        ["AmbientEnabled"] = false,
+        ["AmbientColor"] = Color3.new(1,1,1),
+        ["FieldOfViewEnabled"] = false,
+        ["FieldOfViewValue"] = 70,
+        ["Fullbright"] = false,
+    },
 
     ["South_Bronx"] = {
-        ["Click_Delete_Enabled"] = false;
-        ["Click_Delete_Active"] = false;
-        ["NeverDeleteFloors"] = true;
-
-        ["Spawn_Where_You_Died"] = false;
-
-        ["Farm_Data"] = {
-            ["Time_Elapsed"] = 0;
-            ["Marshmellows_Sold"] = 0;
-            ["Cards_Swiped"] = 0;
-            ["Chips_Sold"] = 0;
-        };
-
-        ["Teleport_Method"] = "Exempt";
-
-        ["Guns"] = {};
-
-        ["KillAura"] = {
-            ["Enabled"] = false;
-            ["Range"] = 375;
-            ["WhitelistValaryUsers"] = false;
-        };
-
-        ["PingBasedTiming"] = true;
-        ["Teleport_Time"] = 0.175;
-        ["PingCompensation"] = 10;
-        ["FrameBasedTiming"] = false;
-        
-        ["Speed"] = false;
-        ["SpeedValue"] = 0.5;
-
-        ["InfiniteStamina"] = false;
-        ["HideName"] = false;
-        ["HideName_NameValue"] = 'discord.gg/valarygg';
-        ["InstantInteract"] = false;
-
-        ["Can_Teleport"] = false;
-
+        ["Click_Delete_Enabled"] = false,
+        ["Click_Delete_Active"] = false,
+        ["NeverDeleteFloors"] = true,
+        ["Spawn_Where_You_Died"] = false,
+        ["Farm_Data"] = { Time_Elapsed = 0, Marshmellows_Sold = 0, Cards_Swiped = 0, Chips_Sold = 0 },
+        ["Teleport_Method"] = "Exempt",
+        ["Guns"] = {},
+        ["KillAura"] = { Enabled = false, Range = 375, WhitelistValaryUsers = false },
+        ["PingBasedTiming"] = true,
+        ["Teleport_Time"] = 0.175,
+        ["PingCompensation"] = 10,
+        ["Speed"] = false,
+        ["SpeedValue"] = 0.5,
+        ["InfiniteStamina"] = false,
+        ["HideName"] = false,
+        ["HideName_NameValue"] = 'discord.gg/valarygg',
+        ["InstantInteract"] = false,
+        ["Can_Teleport"] = false,
         ["FarmingUtilities"] = {
-            ["AutoBuyGun"] = false;
-            ["AutoBuyMask"] = false;
-            ["CardFarm"] = false;
-            ["BoxFarm"] = false;
-            ["ChipFarm"] = false;
-            ["MarshmallowFarm"] = false;
-            ["MarshmallowIncrement"] = 5;
-
-            ["Webhook_URL"] = "";
-            ["Webhook_Enabled"] = false;
-            ["Log_SouthBronx_Name"] = false;
-            ["WebHook_Interval"] = 180;
-            ["OnlySendIfAutofarming"] = false;
-        };
-    };
+            ["AutoBuyGun"] = false,
+            ["AutoBuyMask"] = false,
+            ["CardFarm"] = false,
+            ["BoxFarm"] = false,
+            ["ChipFarm"] = false,
+            ["MarshmallowFarm"] = false,
+            ["MarshmallowIncrement"] = 5,
+            ["Webhook_URL"] = "",
+            ["Webhook_Enabled"] = false,
+            ["Log_SouthBronx_Name"] = false,
+            ["WebHook_Interval"] = 180,
+            ["OnlySendIfAutofarming"] = false,
+        },
+    },
 
     ["TargetSelector"] = {
-        ["Targetting"] = false;
-        ["UseFOV"] = false;
-        ["HealthCheck"] = false;
-        ["Health"] = 5;
-        ["VisibleCheck"] = false;
-        ["LimitDistance"] = false;
-        ["MaxDistance"] = 350;
-        ["FriendCheck"] = false;
-        ["ProtectedCheck"] = false;
-        ["GangCheck"] = false;
-        ["Gangs"] = {};
-    };
+        ["Targetting"] = false,
+        ["UseFOV"] = false,
+        ["HealthCheck"] = false,
+        ["Health"] = 5,
+        ["VisibleCheck"] = false,
+        ["LimitDistance"] = false,
+        ["MaxDistance"] = 350,
+        ["FriendCheck"] = false,
+        ["ProtectedCheck"] = false,
+        ["GangCheck"] = false,
+        ["Gangs"] = {},
+    },
 
     ["FieldOfView"] = {
-        ["Draw"] = false;
-        ["Radius"] = 100;
-        ["Transparency"] = 1;
-        ["FieldOfViewColor"] = Color3.new(1,1,1);
-        ["FilledDraw"] = false;
-        ["FilledTransparency"] = 0.25;
-        ["FilledColor"] = Color3.new(1,1,1);
-        ["DrawSnapline"] = false;
-        ["SnaplineColor"] = Color3.new(1,1,1);
-        ["HightlightTarget"] = false;
-        ["HightlightFillColor"] = Color3.new(1,1,1);
-        ["HightlightFillTransparency"] = 0.75;
-        ["HightlightOutlineColor"] = Color3.new(1,1,1);
-        ["HightlightOutlineTransparency"] = 0.25;
-    };
-    
+        ["Draw"] = false,
+        ["Radius"] = 100,
+        ["Transparency"] = 1,
+        ["FieldOfViewColor"] = Color3.new(1,1,1),
+        ["FilledDraw"] = false,
+        ["FilledTransparency"] = 0.25,
+        ["FilledColor"] = Color3.new(1,1,1),
+        ["DrawSnapline"] = false,
+        ["SnaplineColor"] = Color3.new(1,1,1),
+        ["HightlightTarget"] = false,
+        ["HightlightFillColor"] = Color3.new(1,1,1),
+        ["HightlightFillTransparency"] = 0.75,
+        ["HightlightOutlineColor"] = Color3.new(1,1,1),
+        ["HightlightOutlineTransparency"] = 0.25,
+    },
+
     ["Silent"] = {
-        ["Enabled"] = false;
-        ["WallBang"] = false;
-        ["HitChance"] = 100;
-        ["HitParts"] = {"Head"};
-        ["Spread"] = nil;
-    };
+        ["Enabled"] = false,
+        ["WallBang"] = false,
+        ["HitChance"] = 100,
+        ["HitParts"] = {"Head"},
+    },
 }
 
-local Players = Services.Players;
-local ReplicatedStorage = Services.ReplicatedStorage;
-local UserInputService = Services.UserInputService;
-local Workspace = Services.Workspace;
-local RunService = Services.RunService;
-local ProximityPromptService = Services.ProximityPromptService;
-local MarketplaceService = Services.MarketplaceService;
-local StarterGui = Services.StarterGui
-local VirtualInputManager = Services.VirtualInputManager;
+-- Servicios y resto del código (UI, Silent Aim, Hitbox, Farms, Teleports, etc.)
+local Services = setmetatable({}, { __index = function(self, k) return game:GetService(k) end })
+
+local Players = Services.Players
+local ReplicatedStorage = Services.ReplicatedStorage
+local UserInputService = Services.UserInputService
+local Workspace = Services.Workspace
+local RunService = Services.RunService
+local ProximityPromptService = Services.ProximityPromptService
+local VirtualInputManager = Services.VirtualInputManager
 local Lighting = Services.Lighting
-local Debris = Services.Debris
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-local Stats = Services.Stats
-local Device_Mobile = UserInputService.TouchEnabled and (not UserInputService.KeyboardEnabled)
-
-local Game_Name_MarketPlaceService = "South Bronx : The Trenches ❗"
 
 local Mouse = LocalPlayer:GetMouse()
-local Move_Mouse_Function = mousemoverel
+local Device_Mobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
+-- Locations (mantenidas)
 local Locations = {
-    ["Main Gun Store 🔫"] = CFrame.new(219, 6, -158);
-    ["Black Market 💹"] = CFrame.new(671, 6, 251);
-    ["Chip Factory 🥫"] = CFrame.new(-479, 4, -437);
-    ["DealerShip 🚗"] = CFrame.new(738, 6, 439);
-    ["DealerShip Apartments 🌇"] = CFrame.new(717, 5, 548);
-    ["Clothes Store 👕"] = CFrame.new(-197, 6, -74);
-    ["Box Job Apartments 📦"] = CFrame.new(-527, 6, 142);
-    ["Gun Buyer 🔫"] = CFrame.new(75, 4, 23);
-    ["Bank 💳"] = CFrame.new(-47, 6, -340);
-    ["Fake ID Seller 🎫"] = CFrame.new(219, 6, -331);
-    ["DOA Turf 🔴"] = CFrame.new(-335, 6, -415);
-    ["Casino ♠️"] = CFrame.new(1112, 3, -40);
-    ["Backpack Store 🎒"] = CFrame.new(1010, 4, 421);
-    ["Casino Apartments 🏢"] = CFrame.new(1162, 4, -265);
-    ["Robbery Equipment 🛠️"] = CFrame.new(1009, 4, -325);
-    ["OGZ Turf 🟣"] = CFrame.new(125, 6, -466);
-    ["YGZ Turf 🟢"] = CFrame.new(3, 6, 223);
-    ["Studio 🎙"] = CFrame.new(533, 4, 156);
-    ["Shoe Store 👟"] = CFrame.new(525, 7, -184);
-    ["Second Gun Store 🔫"] = CFrame.new(-459, 6, 328);
-    ["Exclusive Gun Store 🔫"] = CFrame.new(1131, 4, 173);
-    ["Marshmallow Dealer 🧂"] = CFrame.new(510, 3, 594);
+    ["Main Gun Store 🔫"] = CFrame.new(219, 6, -158),
+    ["Black Market 💹"] = CFrame.new(671, 6, 251),
+    ["Chip Factory 🥫"] = CFrame.new(-479, 4, -437),
+    ["DealerShip 🚗"] = CFrame.new(738, 6, 439),
+    ["DealerShip Apartments 🌇"] = CFrame.new(717, 5, 548),
+    ["Clothes Store 👕"] = CFrame.new(-197, 6, -74),
+    ["Box Job Apartments 📦"] = CFrame.new(-527, 6, 142),
+    ["Gun Buyer 🔫"] = CFrame.new(75, 4, 23),
+    ["Bank 💳"] = CFrame.new(-47, 6, -340),
+    ["Fake ID Seller 🎫"] = CFrame.new(219, 6, -331),
+    ["DOA Turf 🔴"] = CFrame.new(-335, 6, -415),
+    ["Casino ♠️"] = CFrame.new(1112, 3, -40),
+    ["Backpack Store 🎒"] = CFrame.new(1010, 4, 421),
+    ["Casino Apartments 🏢"] = CFrame.new(1162, 4, -265),
+    ["Robbery Equipment 🛠️"] = CFrame.new(1009, 4, -325),
+    ["OGZ Turf 🟣"] = CFrame.new(125, 6, -466),
+    ["YGZ Turf 🟢"] = CFrame.new(3, 6, 223),
+    ["Studio 🎙"] = CFrame.new(533, 4, 156),
+    ["Shoe Store 👟"] = CFrame.new(525, 7, -184),
+    ["Second Gun Store 🔫"] = CFrame.new(-459, 6, 328),
+    ["Exclusive Gun Store 🔫"] = CFrame.new(1131, 4, 173),
+    ["Marshmallow Dealer 🧂"] = CFrame.new(510, 3, 594),
 }
-
 local Location_Name = {"Dirty Hobo 💩"; "Active ATM 🏧", "Personal Apartment 🏠", "Robbable Vehicle 🚗"}
 
 for Index, Value in Locations do
