@@ -1455,7 +1455,12 @@ end
         end
     end)
 
-    Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(CheckPlayer)
+   -- Ensure Config exists, and initialize Connections if it is missing
+if not Config then Config = {} end
+if not Config.Connections then Config.Connections = {} end
+
+-- Safely connect the event
+Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(CheckPlayer)
 
     for Index, Value in Players:GetPlayers() do
         CheckPlayer(Value)
