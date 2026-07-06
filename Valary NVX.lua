@@ -1,255 +1,332 @@
+if LPH_OBFUSCATED == nil then
+    local assert = assert
+    local type = type
+    local setfenv = setfenv
+    LPH_ENCNUM = function(toEncrypt, ...)
+        assert(type(toEncrypt) == "number" and #{...} == 0, "LPH_ENCNUM only accepts a single constant double or integer as an argument.")
+        return toEncrypt
+    end
+    LPH_NUMENC = LPH_ENCNUM
+    LPH_ENCSTR = function(toEncrypt, ...)
+        assert(type(toEncrypt) == "string" and #{...} == 0, "LPH_ENCSTR only accepts a single constant string as an argument.")
+        return toEncrypt
+    end
+    LPH_STRENC = LPH_ENCSTR
+    LPH_ENCFUNC = function(toEncrypt, encKey, decKey, ...)
+        
+        assert(type(toEncrypt) == "function" and type(encKey) == "string" and #{...} == 0, "LPH_ENCFUNC accepts a constant function, constant string, and string variable as arguments.")
+        return toEncrypt
+    end
+    LPH_FUNCENC = LPH_ENCFUNC
+    LPH_JIT = function(f, ...)
+        assert(type(f) == "function" and #{...} == 0, "LPH_JIT only accepts a single constant function as an argument.")
+        return f
+    end
+    LPH_JIT_MAX = LPH_JIT
+    LPH_NO_VIRTUALIZE = function(f, ...)
+        assert(type(f) == "function" and #{...} == 0, "LPH_NO_VIRTUALIZE only accepts a single constant function as an argument.")
+        return f
+    end
+    LPH_NO_UPVALUES = function(f, ...)
+        assert(type(setfenv) == "function", "LPH_NO_UPVALUES can only be used on Lua versions with getfenv & setfenv")
+        assert(type(f) == "function" and #{...} == 0, "LPH_NO_UPVALUES only accepts a single constant function as an argument.")
+        local env = getrenv()
+        return setfenv(
+            LPH_NO_VIRTUALIZE(function(...)
+                return func(...)
+            end),
+            setmetatable(
+                {
+                    func = f
+                },
+                {
+                    __index = env,
+                    __newindex = env
+                }
+            )
+        )
+    end
+    LPH_CRASH = function(...)
+        assert(#{...} == 0, "LPH_CRASH does not accept any arguments.")
+        game:Shutdown()
+        while true do end
+    end
+    LRM_IsUserPremium = false
+    LRM_LinkedDiscordID = "1096603799159832636"
+    LRM_ScriptName = "NVX"
+    LRM_TotalExecutions = 0
+    LRM_SecondsLeft = math.huge
+    LRM_UserNote = "Developer";
+end;
+
+local Window, Watermark;
+
 if getgenv().NVX_loaded then
     return
 end
 
 getgenv().NVX_loaded = true
 
--- LPH Stubs (compatibilidad)
-if LPH_OBFUSCATED == nil then
-    LPH_ENCNUM = function(n) return n end
-    LPH_NUMENC = LPH_ENCNUM
-    LPH_ENCSTR = function(s) return s end
-    LPH_STRENC = LPH_ENCSTR
-    LPH_ENCFUNC = function(f) return f end
-    LPH_FUNCENC = LPH_ENCFUNC
-    LPH_JIT = function(f) return f end
-    LPH_JIT_MAX = LPH_JIT
-    LPH_NO_VIRTUALIZE = function(f) return f end
-    LRM_INIT_SCRIPT = function(f) return f() end
-    LPH_CRASH = function() end
+local LoadingTick = os.clock()
+
+local gethui = gethui or function()
+    return game.CoreGui
 end
 
-LRM_INIT_SCRIPT(function()
-    task.wait(1)
-    if not game:IsLoaded() then game.Loaded:Wait() end
-    if not game:GetService("Players").LocalPlayer.Character then 
-        game:GetService("Players").LocalPlayer.CharacterAdded:Wait()
-    end
+hookfunction(isfunctionhooked, function()
+    return false
 end)
 
-local LoadingTick = os.clock()
-local LocalPlayer = game:GetService("Players").LocalPlayer
-local Console_Server = game.PlaceId == 15124180230
+local Library = {Friendly_Players = {}, Priority_Players = {}, Selected_Player = nil}
 
--- ==================== CONFIG ====================
-local Config = {
-    ["Gun_Handle"] = nil,
-    ["NVX_Users"] = {},
-    ["Whitelisted_People"] = {},
+local Volcano = string.find(getexecutorname():lower(), "volcano") ~= nil
 
-    ["Spread"] = {Enabled = false; Reduce = 100},
-    ["Fire_Rate"] = {Enabled = false; Increase = 2},
-    ["One Tap"] = {Enabled = false},
-    ["Recoil"] = {Enabled = false; Reduce = 100},
-    ["No Jam"] = {Enabled = false},
-    ["Instant Reload"] = {Enabled = false},
-    ["Instant Bullet"] = {Enabled = false},
-    ["Force Auto"] = {Enabled = false},
-    ["Infinite Ammo"] = {Enabled = false},
-    ["Instant Equip"] = {Enabled = false},
+local Services = setmetatable({}, {
+    __index = LPH_NO_VIRTUALIZE(function(self, service, key) 
+        return (cloneref ~= nil) and cloneref(game:GetService(service)) or game:GetService(service)
+    end)
+})
 
-    ["VehicleModifications"] = {
-        ["SpeedEnabled"] = false,
-        ["SpeedValue"] = 10/1000,
-        ["BreakEnabled"] = false,
-        ["BreakValue"] = 50/1000,
-        ["InstantStop"] = false,
-        ["InstantStopBind"] = Enum.KeyCode.V,
-    },
-
-    ["Tracers"] = {
-        ["Enabled"] = false,
-        ["Duration"] = 3,
-        ["StartColor"] = Color3.fromRGB(255, 85, 0),
-        ["EndColor"] = Color3.fromRGB(0, 0, 0),
-        ["Rainbow"] = false,
-    },
-
-    ["Hit_Sounds"] = {
-        ["Neverlose"] = "rbxassetid://8726881116",
-        ["Hitmarker"] = "rbxassetid://160432334",
-        ["Gamesense"] = "rbxassetid://4817809188",
-        ["Rust"] = "rbxassetid://1255040462",
-        ["TF2"] = "rbxassetid://2868331684",
-        ["Among Us"] = "rbxassetid://5700183626",
-        ["Minecraft"] = "rbxassetid://4018616850",
-        ["CS:GO"] = "rbxassetid://6937353691",
-        ["Call Of Duty"] = "rbxassetid://5952120301",
-        ["Pop"] = "rbxassetid://198598793",
-        ["Bruh"] = "rbxassetid://4275842574",
-        ["Bamboo"] = "rbxassetid://3769434519",
-        ["Steve"] = "rbxassetid://4965083997"
-    },
-
-    ["Hit_Sounds_Settings"] = {
-        ["Enabled"] = false,
-        ["Volume"] = 5,
-        ["Selected"] = "Neverlose",
-        ["HideNormalSounds"] = false,
-    },
-
-    ["Hitbox_Expander"] = {
-        ["Enabled"] = false,
-        ["Multiplier"] = 15,
-        ["SafeZoneCheck"] = false,
-        ["Color"] = Color3.new(1,1,1),
-        ["Transparency"] = 0.5,
-        ["Type"] = "Block",
-        ["Material"] = "ForceField",
-        ["Part"] = "Head",
-    },
-
-    ["WorldVisuals"] = {
-        ["SaturationEnabled"] = false,
-        ["Saturation_Value"] = 1,
-        ["StretchEnabled"] = false,
-        ["StretchValue"] = 0.7,
-        ["FogColorEnabled"] = false,
-        ["FogColor"] = Color3.new(1,1,1),
-        ["AmbientEnabled"] = false,
-        ["AmbientColor"] = Color3.new(1,1,1),
-        ["FieldOfViewEnabled"] = false,
-        ["FieldOfViewValue"] = 70,
-        ["Fullbright"] = false,
-    },
-
-    ["South_Bronx"] = {
-        ["Click_Delete_Enabled"] = false,
-        ["Click_Delete_Active"] = false,
-        ["NeverDeleteFloors"] = true,
-        ["Spawn_Where_You_Died"] = false,
-        ["Farm_Data"] = { Time_Elapsed = 0, Marshmellows_Sold = 0, Cards_Swiped = 0, Chips_Sold = 0 },
-        ["Teleport_Method"] = "Exempt",
-        ["Guns"] = {},
-        ["KillAura"] = { Enabled = false, Range = 375, WhitelistValaryUsers = false },
-        ["PingBasedTiming"] = true,
-        ["Teleport_Time"] = 0.175,
-        ["PingCompensation"] = 10,
-        ["Speed"] = false,
-        ["SpeedValue"] = 0.5,
-        ["InfiniteStamina"] = false,
-        ["HideName"] = false,
-        ["HideName_NameValue"] = 'discord.gg/valarygg',
-        ["InstantInteract"] = false,
-        ["Can_Teleport"] = false,
-        ["FarmingUtilities"] = {
-            ["AutoBuyGun"] = false,
-            ["AutoBuyMask"] = false,
-            ["CardFarm"] = false,
-            ["BoxFarm"] = false,
-            ["ChipFarm"] = false,
-            ["MarshmallowFarm"] = false,
-            ["MarshmallowIncrement"] = 5,
-            ["Webhook_URL"] = "",
-            ["Webhook_Enabled"] = false,
-            ["Log_SouthBronx_Name"] = false,
-            ["WebHook_Interval"] = 180,
-            ["OnlySendIfAutofarming"] = false,
-        },
-    },
-
-    ["TargetSelector"] = {
-        ["Targetting"] = false,
-        ["UseFOV"] = false,
-        ["HealthCheck"] = false,
-        ["Health"] = 5,
-        ["VisibleCheck"] = false,
-        ["LimitDistance"] = false,
-        ["MaxDistance"] = 350,
-        ["FriendCheck"] = false,
-        ["ProtectedCheck"] = false,
-        ["GangCheck"] = false,
-        ["Gangs"] = {},
-    },
-
-    ["FieldOfView"] = {
-        ["Draw"] = false,
-        ["Radius"] = 100,
-        ["Transparency"] = 1,
-        ["FieldOfViewColor"] = Color3.new(1,1,1),
-        ["FilledDraw"] = false,
-        ["FilledTransparency"] = 0.25,
-        ["FilledColor"] = Color3.new(1,1,1),
-        ["DrawSnapline"] = false,
-        ["SnaplineColor"] = Color3.new(1,1,1),
-        ["HightlightTarget"] = false,
-        ["HightlightFillColor"] = Color3.new(1,1,1),
-        ["HightlightFillTransparency"] = 0.75,
-        ["HightlightOutlineColor"] = Color3.new(1,1,1),
-        ["HightlightOutlineTransparency"] = 0.25,
-    },
-
-    ["Silent"] = {
-        ["Enabled"] = false,
-        ["WallBang"] = false,
-        ["HitChance"] = 100,
-        ["HitParts"] = {"Head"},
-    },
-}
-
--- Servicios y resto del código (UI, Silent Aim, Hitbox, Farms, Teleports, etc.)
-local Services = setmetatable({}, { __index = function(self, k) return game:GetService(k) end })
-
-local Players = Services.Players
-local ReplicatedStorage = Services.ReplicatedStorage
-local UserInputService = Services.UserInputService
-local Workspace = Services.Workspace
-local RunService = Services.RunService
-local ProximityPromptService = Services.ProximityPromptService
-local VirtualInputManager = Services.VirtualInputManager
-local Lighting = Services.Lighting
-local Camera = Workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-
-local Mouse = LocalPlayer:GetMouse()
-local Device_Mobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-
--- Locations (mantenidas)
-local Locations = {
-    ["Main Gun Store 🔫"] = CFrame.new(219, 6, -158),
-    ["Black Market 💹"] = CFrame.new(671, 6, 251),
-    ["Chip Factory 🥫"] = CFrame.new(-479, 4, -437),
-    ["DealerShip 🚗"] = CFrame.new(738, 6, 439),
-    ["DealerShip Apartments 🌇"] = CFrame.new(717, 5, 548),
-    ["Clothes Store 👕"] = CFrame.new(-197, 6, -74),
-    ["Box Job Apartments 📦"] = CFrame.new(-527, 6, 142),
-    ["Gun Buyer 🔫"] = CFrame.new(75, 4, 23),
-    ["Bank 💳"] = CFrame.new(-47, 6, -340),
-    ["Fake ID Seller 🎫"] = CFrame.new(219, 6, -331),
-    ["DOA Turf 🔴"] = CFrame.new(-335, 6, -415),
-    ["Casino ♠️"] = CFrame.new(1112, 3, -40),
-    ["Backpack Store 🎒"] = CFrame.new(1010, 4, 421),
-    ["Casino Apartments 🏢"] = CFrame.new(1162, 4, -265),
-    ["Robbery Equipment 🛠️"] = CFrame.new(1009, 4, -325),
-    ["OGZ Turf 🟣"] = CFrame.new(125, 6, -466),
-    ["YGZ Turf 🟢"] = CFrame.new(3, 6, 223),
-    ["Studio 🎙"] = CFrame.new(533, 4, 156),
-    ["Shoe Store 👟"] = CFrame.new(525, 7, -184),
-    ["Second Gun Store 🔫"] = CFrame.new(-459, 6, 328),
-    ["Exclusive Gun Store 🔫"] = CFrame.new(1131, 4, 173),
-    ["Marshmallow Dealer 🧂"] = CFrame.new(510, 3, 594),
-}
-local Location_Name = {"Dirty Hobo 💩"; "Active ATM 🏧", "Personal Apartment 🏠", "Robbable Vehicle 🚗"}
-
-for Index, Value in Locations do
-    table.insert(Location_Name, Index)
+for Index, Value in getconnections(gethui().ChildRemoved) do
+    Value:Disable()
 end
 
-table.sort(Location_Name)
+local Config = {
+    ["Gun_Handle"] = nil;
+    ["NVX_Users"] = {};
+
+    Tracers = {
+        Enabled = false;
+        Duration = 3;
+        StartColor = Color3.fromRGB(255, 85, 0);
+        EndColor = Color3.fromRGB(0, 0, 0);
+        Rainbow = false;
+    };
+
+    Hit_Sounds = {
+        Neverlose = "rbxassetid://8726881116",
+        Hitmarker = "rbxassetid://160432334",
+        Gamesense = "rbxassetid://4817809188",
+        Rust = "rbxassetid://1255040462",
+        TF2 = "rbxassetid://2868331684",
+        ["Among Us"] = "rbxassetid://5700183626",
+        Minecraft = "rbxassetid://4018616850",
+        ["CS:GO"] = "rbxassetid://6937353691",
+        ["Call Of Duty"] = "rbxassetid://5952120301",
+        Pop = "rbxassetid://198598793",
+        Bruh = "rbxassetid://4275842574",
+        Bamboo = "rbxassetid://3769434519",
+        Steve = "rbxassetid://4965083997"
+    };
+
+    Hit_Sounds_Settings = {
+        Enabled = false;
+        Volume = 5;
+        Selected = "Neverlose";
+        HideNormalSounds = false;
+    };
+
+    ["WorldVisuals"] = {
+        ["SaturationEnabled"] = false;
+        ["Saturation_Value"] = 1;
+
+        ["StretchEnabled"] = false;
+        ["StretchValue"] = 0.7;
+
+        ["FogColorEnabled"] = false;
+        ["FogColor"] = Color3.new(1,1,1);
+
+        ["AmbientEnabled"] = false;
+        ["AmbientColor"] = Color3.new(1,1,1);
+
+        ["FieldOfViewEnabled"] = false;
+        ["FieldOfViewValue"] = 70;
+
+        ["Fullbright"] = false;
+    };
+
+    ["Gun_Held"] = false;
+
+    ["VehicleModifications"] = {
+        ["SpeedEnabled"] = false;
+        ["SpeedValue"] = 10/1000;
+        ["BreakEnabled"] = false;
+        ["BreakValue"] = 50/1000;
+        ["InstantStop"] = false;
+        ["InstantStopBind"] = Enum.KeyCode.V;
+    };
+
+    ["MiscSettings"] = {
+        ["ModifySpeed"] = {
+            ["Enabled"] = false;
+            ["Value"] = 16;
+        };
+        
+        ["ClickTeleport_Enabled"] = false;
+        ["ClickTeleport_Key"] = Enum.KeyCode.LeftControl;
+
+        ["ModifyJump"] = {
+            ["Enabled"] = false;
+            ["Infinity"] = false;
+            ["Value"] = 50;
+        };
+
+        ["Fly"] = {
+            ["Enabled"] = false;
+            ["Type"] = "CFrame";
+            ["Speed"] = 50;
+        };
+
+        ["SpinBot"] = {
+            ["Enabled"] = false;
+            ["Speed"] = 35;
+        };
+    };
+
+
+    ["Connections"] = {};
+
+    ["The_Bronx"] = {
+        ["Guns"] = {};
+
+        ["KillAura"] = false;
+        ["KillAuraRange"] = 300;
+        ["KillAuraWhitelist"] = {};
+    
+        ["PlayerModifications"] = {
+            ["InfiniteSleep"] = false;
+            ["InfiniteStamina"] = false;
+            ["InfiniteHunger"] = false;
+            ["InstantInteract"] = false;
+            ["InstantRevive"] = false;
+            ["AutoPickupCash"] = false;
+            ["AutoPickupBags"] = false;
+            ["DisableCameraBobbing"] = false;
+            ["DisableCameras"] = false;
+            ["BypassLockedCars"] = false;
+            ["DisableBloodEffects"] = false;
+            ["NoJumpCooldown"] = false;
+            ["NoRentPay"] = false;
+            ["NoFallDamage"] = false;
+            ["FasterRespawn"] = false;
+            ["NoKnockback"] = false;
+            ["InfiniteHealth"] = false;
+            ["RespawnWhereYouDied"] = false;
+        };
+
+        ["PlayerUtilities"] = {
+            ["SelectedPlayer"] = "...";
+            ["BringingPlayer"] = false;
+            ["SpectatePlayer"] = false;
+            ["AutoKill"] = false;
+            ["AutoRagdoll"] = false;
+            ["BugPlayer"] = false;
+        };
+
+        ["Farms"] = {
+            ["CollectDroppedMoney"] = false;
+
+            ["CollectDroppedLoot"] = false;
+            ["OnlyCollectGuns"] = false;
+
+            ["AFKCheck"] = false;
+            ["FarmConstructionJob"] = false;
+            ["FarmBank"] = false;
+            ["FarmHouses"] = false;
+            ["FarmStudio"] = false;
+            ["FarmTrash"] = false;
+            ["AutoSellTrash"] = false;
+        };
+
+        ["_Modifications"] = {
+            ["DisableJamming"] = false;
+            ["ModifySpreadValue"] = false;
+            ["ModifyRecoilValue"] = false;
+            ["Automatic"] = false;
+            ["ModifyFireRate"] = false;
+            ["InstantReload"] = false;
+            ["InstantEquip"] = false;
+            ["InfiniteAmmo"] = false;
+            ["InfiniteClips"] = false;
+            ["InfiniteDamage"] = false;
+
+            ["FireRateSpeed"] = 50;
+            ["SpreadPercentage"] = 50;
+            ["RecoilPercentage"] = 50;
+        };
+
+        ["Modifications"] = newproxy(true);
+    };
+
+    ["TargetSelector"] = {
+        ["Targetting"] = false;
+        ["UseFOV"] = false;
+        ["HealthCheck"] = false;
+        ["Health"] = 5;
+        ["VisibleCheck"] = false;
+        ["LimitDistance"] = false;
+        ["MaxDistance"] = 500;
+        ["FriendCheck"] = false;
+        ["ProtectedCheck"] = false;
+        ["GangCheck"] = false;
+        ["Gangs"] = {};
+    };
+
+    ["FieldOfView"] = {
+        ["Draw"] = false;
+        ["Radius"] = 100;
+        ["Transparency"] = 1;
+        ["FieldOfViewColor"] = Color3.new(1,1,1);
+        ["FilledDraw"] = false;
+        ["FilledTransparency"] = 0.25;
+        ["FilledColor"] = Color3.new(1,1,1);
+        ["DrawSnapline"] = false;
+        ["SnaplineColor"] = Color3.new(1,1,1);
+        ["HightlightTarget"] = false;
+        ["HightlightFillColor"] = Color3.new(1,1,1);
+        ["HightlightFillTransparency"] = 0.75;
+        ["HightlightOutlineColor"] = Color3.new(1,1,1);
+        ["HightlightOutlineTransparency"] = 0.25;
+    };
+    
+    ["Silent"] = {
+        ["Enabled"] = false;
+        ["WallBang"] = false;
+        ["HitChance"] = 100;
+        ["HitParts"] = {"Head"};
+        ["Spread"] = nil;
+    };
+}
+
+local Players = Services.Players;
+local ReplicatedStorage = Services.ReplicatedStorage;
+local UserInputService = Services.UserInputService;
+local Workspace = Services.Workspace;
+local RunService = Services.RunService;
+local ProximityPromptService = Services.ProximityPromptService;
+local MarketplaceService = Services.MarketplaceService;
+local StarterGui = Services.StarterGui
+local VirtualInputManager = Services.VirtualInputManager;
+local Lighting = Services.Lighting
+local Debris = Services.Debris
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Stats = Services.Stats
+
+local Device_Mobile = UserInputService.TouchEnabled or false
+
+local Game_Name_MarketPlaceService = "Tha Bronx 3 🐍"
+
+local Mouse = LocalPlayer:GetMouse()
+local Move_Mouse_Function = mousemoverel
 
 local Player_Collide_Data = {}
 
 if not LocalPlayer.Character then
     LocalPlayer.CharacterAdded:Wait()
-    task.wait(1)
 end
 
-if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") and LocalPlayer.Character:FindFirstChild("Humanoid"):GetState() == Enum.HumanoidStateType.Dead then
-    LocalPlayer.CharacterAdded:Wait()
-    task.wait(1)
-end
-
-for Index, Value in LocalPlayer.Character:GetChildren() do
+for Index, Value in LocalPlayer.Character:GetDescendants() do
     pcall(function()
         if Value.CanCollide == true then
             Player_Collide_Data[Value.Name] = Value.CanCollide
@@ -257,17 +334,7 @@ for Index, Value in LocalPlayer.Character:GetChildren() do
     end)
 end
 
-Workspace.Map.Locations.Casino.Robbery.Door.Part:GetPropertyChangedSignal("Rotation"):Connect(function()
-    if Workspace.Map.Locations.Casino.Robbery.Door.Part.Rotation ~= Vector3.new(0,0,0) then
-        Config.South_Bronx.Can_Teleport = false
-    else
-        Config.South_Bronx.Can_Teleport = true
-    end
-end)
-
-Config.South_Bronx.Can_Teleport = Workspace.Map.Locations.Casino.Robbery.Door.Part.Rotation == Vector3.new(0,0,0)
-
-local Target_Highlight = Instance.new("Highlight", gethui())
+local Target_Highlight = Instance.new("Highlight", Services.CoreGui)
 
 Target_Highlight.FillColor = Config.FieldOfView.HightlightFillColor
 Target_Highlight.OutlineColor = Color3.new(1,1,1)
@@ -275,267 +342,94 @@ Target_Highlight.FillTransparency = Config.FieldOfView.HightlightFillTransparenc
 Target_Highlight.OutlineTransparency = 1
 Target_Highlight.Enabled = true
 
-local Start_Balance = LocalPlayer.PlayerGui:WaitForChild("Main"):WaitForChild("Money"):WaitForChild("Amount").Text:match("%$([%d,]+)")
-Start_Balance = Start_Balance:gsub(",", "")
+local RootPart = nil;
 
-local Times_Deposited = 0
+if LocalPlayer.Character then
+    RootPart = LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+end
 
-local convertSeconds = LPH_NO_VIRTUALIZE(function(totalSeconds)
-    local hours = math.floor(totalSeconds / 3600)
-    local minutes = math.floor((totalSeconds % 3600) / 60)
-    local seconds = totalSeconds % 60
-    return string.format("%dh, %dm, %ds", hours, minutes, seconds)
-end)
-
-local Format_Money = LPH_NO_VIRTUALIZE(function(amount)
-    local formatted = tostring(amount)
-    local k
-    while true do  
-        formatted, k = formatted:gsub("^(-?%d+)(%d%d%d)", '%1,%2')
-        if k == 0 then break end
-    end
-    return "$" .. formatted
-end)
-
-Config.SendWebhook = LPH_NO_VIRTUALIZE(function()
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return end
-
-    local New_Balance = LocalPlayer.PlayerGui:WaitForChild("Main"):WaitForChild("Money"):WaitForChild("Amount").Text:match("%$([%d,]+)")
-    New_Balance = New_Balance:gsub(",", "")
-    New_Balance = tonumber(New_Balance)
-
-    for Index = 1, Times_Deposited do
-        New_Balance+=500000
-    end
-
-    local PlusOrMinus = New_Balance >= tonumber(Start_Balance) and "+ " or [[\- ]]
-    local Number = New_Balance - tonumber(Start_Balance)
-
-    local data = {
-        ["username"] = "valary.gg | South Bronx Stats Webhook",
-        ["embeds"] = {{
-            ["title"] = string.format("Player : %s | Data Report", Config.South_Bronx.FarmingUtilities.Log_SouthBronx_Name and LocalPlayer:GetAttribute("FullName") or LocalPlayer.Name),
-            ["color"] = 65280, -- green
-            ["fields"] = {
-                {
-                    ["name"] = "🧂 Marshmallows Sold",
-                    ["value"] = tostring(Config.South_Bronx.Farm_Data.Marshmellows_Sold),
-                    ["inline"] = true
-                },
-                {
-                    ["name"] = "💳 Cards Swiped",
-                    ["value"] = tostring(Config.South_Bronx.Farm_Data.Cards_Swiped),
-                    ["inline"] = true
-                },
-                {
-                    ["name"] = "🍟 Chips Sold",
-                    ["value"] = tostring(Config.South_Bronx.Farm_Data.Chips_Sold),
-                    ["inline"] = true
-                },
-                {
-                    ["name"] = "💰 Cash Earned",
-                    ["value"] = string.format(
-                        "%s%s",
-                        PlusOrMinus,
-                        Format_Money(math.abs(Number))
-                    ),
-                    ["inline"] = true
-                },
-                {
-                    ["name"] = "💸 Current Cash",
-                    ["value"] = tostring(LocalPlayer.PlayerGui:WaitForChild("Main"):WaitForChild("Money"):WaitForChild("Amount").Text),
-                    ["inline"] = true
-                },
-                {
-                    ["name"] = "🏧 ATM Balance",
-                    ["value"] = Config.ATM_BALANCE,
-                    ["inline"] = true
-                },
-                {
-                    ["name"] = "⏰ Auto-Farming Time Elapsed",
-                    ["value"] = convertSeconds(Config.South_Bronx.Farm_Data.Time_Elapsed),
-                    ["inline"] = true
-                },
-                {
-                    ["name"] = "⏱️ Join Time",
-                    ["value"] = convertSeconds(tick() - LocalPlayer:GetAttribute("JoinTime")),
-                    ["inline"] = true
-                }
-            }
-        }},
-    }
-
-    pcall(request, {Url = Config.South_Bronx.FarmingUtilities.Webhook_URL, Body = Services.HttpService:JSONEncode(data), Method = "POST", Headers = {["Content-Type"] = "application/json"}})
-end)
-
-task.spawn(LPH_NO_VIRTUALIZE(function()
-    while true do
-        if Config.South_Bronx.FarmingUtilities.OnlySendIfAutofarming then
-            if not Config.South_Bronx.FarmingUtilities.CardFarm and not Config.South_Bronx.FarmingUtilities.ChipFarm and not Config.South_Bronx.FarmingUtilities.BoxFarm and not Config.South_Bronx.FarmingUtilities.MarshmallowFarm then 
-                task.wait(1)
-                continue 
-            end
-        end
-
-        if Config.South_Bronx.FarmingUtilities.Webhook_Enabled then
-            Config:SendWebhook()
-        end
-        
-        task.wait(Config.South_Bronx.FarmingUtilities.WebHook_Interval)
-    end
+LocalPlayer.CharacterAdded:Connect(LPH_NO_VIRTUALIZE(function(Character)
+    RootPart = Character:WaitForChild("HumanoidRootPart")
 end))
+
+local FireServer, InvokeServer, UnreliableFireServer = Instance.new("RemoteEvent").FireServer, Instance.new("RemoteFunction").InvokeServer, Instance.new("UnreliableRemoteEvent").FireServer
+
+if isfunctionhooked then
+    if isfunctionhooked(FireServer) or isfunctionhooked(UnreliableFireServer) or isfunctionhooked(InvokeServer) and LPH_OBFUSCATED then
+        return Services.Players.LocalPlayer:Kick("Valary.gg | Security : You are running another script, please disable it and execute again")
+    end
+end
+
+-- ===== NVX GLOW AND SNOWFLAKE EFFECTS =====
+local snowflakeFolder = Instance.new("Folder")
+snowflakeFolder.Name = "NVXSnowflakes"
+snowflakeFolder.Parent = Workspace
+
+local snowflakeCount = 50
+local snowflakeSpeed = 0.5
+local lastSnowflakeUpdate = 0
+local updateInterval = 0.1
+
+local function CreateSnowflake()
+    local snowflake = Instance.new("Part")
+    snowflake.Name = "Snowflake"
+    snowflake.Shape = Enum.PartType.Ball
+    snowflake.Size = Vector3.new(0.3, 0.3, 0.3)
+    snowflake.CanCollide = false
+    snowflake.CFrame = Camera.CFrame + Vector3.new(math.random(-50, 50), math.random(20, 50), math.random(-50, 50))
+    snowflake.BrickColor = BrickColor.new("Bright red")
+    snowflake.TopSurface = Enum.SurfaceType.Smooth
+    snowflake.BottomSurface = Enum.SurfaceType.Smooth
+    snowflake.Parent = snowflakeFolder
+    
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.Velocity = Vector3.new(math.random(-2, 2), -snowflakeSpeed, math.random(-2, 2))
+    bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bodyVelocity.Parent = snowflake
+    
+    Debris:AddItem(snowflake, 30)
+    return snowflake
+end
+
+local function ApplyRedGlow(object)
+    if not object then return end
+    if object:FindFirstChild("NVXGlow") then return end
+    
+    local surfaceGlow = Instance.new("SurfaceGui")
+    surfaceGlow.Name = "NVXGlow"
+    surfaceGlow.Parent = object
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    textLabel.BackgroundTransparency = 0.6
+    textLabel.BorderSizePixel = 0
+    textLabel.Parent = surfaceGlow
+end
+
+for i = 1, snowflakeCount do
+    CreateSnowflake()
+end
 
 do -- FrameWork
     -- Load In Assets
         local Black_UI = nil;
+        
+        for Index, Value in getconnections(LocalPlayer.Idled) do
+            if Value["Disable"] then
+                Value["Disable"](Value)
+            end
 
-        --LPH_NO_VIRTUALIZE(function()
-           local Garbage = getgc(true) -- Fallback if getgc() is used in your environment
-
-if typeof(Garbage) == 'table' then
-    for Index, Value in next, Garbage do 
-        if typeof(Value) == 'table' and typeof(rawget(Value, "Homeless")) == 'table' and rawget(Value, "NPCs") ~= nil then 
-            local homelessTable = rawget(Value, "Homeless")
-            local npcsTable = rawget(Value, "NPCs")
-            
-            if typeof(homelessTable) == 'table' and rawget(homelessTable, "MaxDistance") then 
-                rawset(homelessTable, "MaxDistance", 9e9)
-                if typeof(npcsTable) == 'table' then
-                    rawset(npcsTable, "MaxDistance", 9e9)
-                end
+            if Value["Disconnect"] then
+                Value["Disconnect"](Value)
             end
         end
-    end
-else
-    warn("Garbage variable is nil or not a valid table!")
-end
-        --end)()
-        
-        pcall(function()
-            for Index, Value in getconnections(LocalPlayer.Idled) do
-                if Value["Disable"] then
-                    Value["Disable"](Value)
-                end
-
-                if Value["Disconnect"] then
-                    Value["Disconnect"](Value)
-                end
-            end
-        end)
     --
 
-    Config.GetHobo = LPH_NO_VIRTUALIZE(function()
-        local Hobos = {};
-
-        for Index, Value in Workspace.Folders.HomelessPeople:GetChildren() do
-            if Value.Name ~= 'Six' and Value:FindFirstChild("RightLowerLeg") and math.floor(Value:FindFirstChild("RightLowerLeg").Rotation.X) == 90 then
-                table.insert(Hobos, {Hobo = Value, Distance = (LocalPlayer.Character.HumanoidRootPart.Position - Value.HumanoidRootPart.Position).Magnitude})
-            end
-        end
-
-        table.sort(Hobos, function(a,b)
-            return a.Distance<b.Distance
-        end)
-
-        return Hobos[1] and Hobos[1].Hobo or nil
-    end)
-
-    Config.GetUnclaimedApartment = LPH_NO_VIRTUALIZE(function()
-        local Apartment = nil;
-
-        for Index, Value in Workspace.Map.APTS:GetChildren() do
-            if Value:FindFirstChild("name", true) and Value:FindFirstChild("name", true):FindFirstChild("TextLabel", true) then
-                local Cache = nil
-
-                if Workspace.Map.Locations.Apartments:FindFirstChild(Value.Name) or Workspace.Map.Houses:FindFirstChild(Value.Name) then
-                    Cache = Workspace.Map.Locations.Apartments:FindFirstChild(Value.Name) or Workspace.Map.Houses:FindFirstChild(Value.Name)
-                end
-
-                if not Cache then continue end
-                
-                local Interior = Cache:FindFirstChild("Interior") or Cache
-
-                if Cache and Interior:FindFirstChild("Cooking Pot", true) and Value:FindFirstChild("name", true):FindFirstChild("TextLabel", true).Text == "VACANT" then
-                    Apartment = Value;
-                    break
-                end
-            end
-        end
-
-        return Apartment
-    end)
-
-    Config.GetPersonalApartment = LPH_NO_VIRTUALIZE(function()
-        local Apartment = nil;
-
-        for Index, Value in Workspace.Map.APTS:GetChildren() do
-            if Value:FindFirstChild("name", true) and Value:FindFirstChild("name", true):FindFirstChild("TextLabel", true) then
-                if Value:FindFirstChild("name", true):FindFirstChild("TextLabel", true).Text == LocalPlayer.Name then
-                    Apartment = Value;
-                    break
-                end
-            end
-        end
-
-        return Apartment
-    end)
-
-    Config.PlaySound = LPH_NO_VIRTUALIZE(function()
-        if not Config.Hit_Sounds_Settings.Enabled then return end
-
-        local sound = Instance.new("Sound")
-        sound.SoundId = Config.Hit_Sounds[Config.Hit_Sounds_Settings.Selected]
-        sound.Volume = Config.Hit_Sounds_Settings.Volume
-        sound.Looped = false
-        sound.Parent = Workspace
-        sound.RollOffMode = Enum.RollOffMode.Linear
-        sound.EmitterSize = 2
-        sound.MaxDistance = 10
-
-        sound:Play()
-    end)
-
-    Config.InsideSafezone = LPH_NO_VIRTUALIZE(function(Player)
-        if not Player or not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then
-            return true
-        end
-
-        for Index, Zone in pairs(Workspace.Map.Safezones:GetChildren()) do
-            if Zone:IsA("Part") then
-                if Zone then
-                    local Relative_Position = Zone.CFrame:PointToObjectSpace(Player.Character:FindFirstChild("HumanoidRootPart").Position)
-
-                    if math.abs(Relative_Position.X) <= Zone.Size.X/2 and
-                    math.abs(Relative_Position.Y) <= Zone.Size.Y/2 and
-                    math.abs(Relative_Position.Z) <= Zone.Size.Z/2 then
-                        return true
-                    end
-                end
-            end
-        end
-
-        return false
-    end)
-
-    Config.GetRobbableVehicle = LPH_NO_VIRTUALIZE(function()
-        local Vehicle = nil;
-        
-        for Index, Value in Workspace.Folders.RobbableCars:GetChildren() do
-            if Value:FindFirstChild("WindowBreak") and Value:FindFirstChild("WindowBreak").Transparency ~= 1 then
-                Vehicle = Value
-                break
-            end
-        end
-
-        return Vehicle
-    end)
-
-    Config.HideScreen = LPH_JIT_MAX(function(Title)
-        if Black_UI then return end
-
+    Config.HideScreen = LPH_JIT_MAX(function(Self, Title)
         Black_UI = Instance.new("ScreenGui")
         Black_UI.Name = getexecutorname().."____{_____"
-        Black_UI.Parent = gethui() 
+        Black_UI.Parent = gethui and gethui() or Services.CoreGui
     
         local frame = Instance.new("Frame")
         frame.Name = "BlackFrame"
@@ -568,129 +462,14 @@ end
         return textLabel
     end)
 
-    FLYING = false
-    QEfly = true
-    iyflyspeed = 1
-    vehicleflyspeed = 1
-    function sFLY(vfly)
-        local plr = Players.LocalPlayer
-        local char = plr.Character or plr.CharacterAdded:Wait()
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if not humanoid then
-            repeat task.wait() until char:FindFirstChildOfClass("Humanoid")
-            humanoid = char:FindFirstChildOfClass("Humanoid")
+    Config.SetText = LPH_JIT_MAX(function(Self, Text)
+        if Black_UI then
+            local accent = Library.Theme.Accent
+            local accentString = string.format("rgb(%d,%d,%d)", accent.R * 255, accent.G * 255, accent.B * 255)
+
+            Black_UI["\nhideuiNVX"].Text = '<font color="' .. accentString .. '">NVX</font>\n' .. Text
         end
-
-        if flyKeyDown or flyKeyUp then
-            flyKeyDown:Disconnect()
-            flyKeyUp:Disconnect()
-        end
-
-        local T = char:FindFirstChild("HumanoidRootPart")
-        local CONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
-        local lCONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
-        local SPEED = 0
-
-        local function FLY()
-            FLYING = true
-            local BG = Instance.new('BodyGyro')
-            local BV = Instance.new('BodyVelocity')
-            BG.P = 9e4
-            BG.Parent = T
-            BV.Parent = T
-            BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-            BG.CFrame = T.CFrame
-            BV.Velocity = Vector3.new(0, 0, 0)
-            BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-            task.spawn(LPH_NO_VIRTUALIZE(function()
-                repeat task.wait()
-                    local camera = workspace.CurrentCamera
-                    if not vfly and humanoid then
-                        humanoid.PlatformStand = true
-                    end
-
-                    if CONTROL.L + CONTROL.R ~= 0 or CONTROL.F + CONTROL.B ~= 0 or CONTROL.Q + CONTROL.E ~= 0 then
-                        SPEED = 50
-                    elseif not (CONTROL.L + CONTROL.R ~= 0 or CONTROL.F + CONTROL.B ~= 0 or CONTROL.Q + CONTROL.E ~= 0) and SPEED ~= 0 then
-                        SPEED = 0
-                    end
-                    if (CONTROL.L + CONTROL.R) ~= 0 or (CONTROL.F + CONTROL.B) ~= 0 or (CONTROL.Q + CONTROL.E) ~= 0 then
-                        BV.Velocity = ((camera.CFrame.LookVector * (CONTROL.F + CONTROL.B)) + ((camera.CFrame * CFrame.new(CONTROL.L + CONTROL.R, (CONTROL.F + CONTROL.B + CONTROL.Q + CONTROL.E) * 0.2, 0).p) - camera.CFrame.p)) * SPEED
-                        lCONTROL = {F = CONTROL.F, B = CONTROL.B, L = CONTROL.L, R = CONTROL.R}
-                    elseif (CONTROL.L + CONTROL.R) == 0 and (CONTROL.F + CONTROL.B) == 0 and (CONTROL.Q + CONTROL.E) == 0 and SPEED ~= 0 then
-                        BV.Velocity = ((camera.CFrame.LookVector * (lCONTROL.F + lCONTROL.B)) + ((camera.CFrame * CFrame.new(lCONTROL.L + lCONTROL.R, (lCONTROL.F + lCONTROL.B + CONTROL.Q + CONTROL.E) * 0.2, 0).p) - camera.CFrame.p)) * SPEED
-                    else
-                        BV.Velocity = Vector3.new(0, 0, 0)
-                    end
-                    BG.CFrame = camera.CFrame
-                until not FLYING
-                CONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
-                lCONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
-                SPEED = 0
-                BG:Destroy()
-                BV:Destroy()
-
-                if humanoid then humanoid.PlatformStand = false end
-            end))
-        end
-
-        flyKeyDown = UserInputService.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(input, processed)
-            if input.KeyCode == Enum.KeyCode.W then
-                CONTROL.F = (vfly and vehicleflyspeed)
-            elseif input.KeyCode == Enum.KeyCode.S then
-                CONTROL.B = - (vfly and vehicleflyspeed)
-            elseif input.KeyCode == Enum.KeyCode.A then
-                CONTROL.L = - (vfly and vehicleflyspeed)
-            elseif input.KeyCode == Enum.KeyCode.D then
-                CONTROL.R = (vfly and vehicleflyspeed)
-            elseif input.KeyCode == Enum.KeyCode.E and QEfly then
-                CONTROL.Q = (vfly and vehicleflyspeed)*2
-            elseif input.KeyCode == Enum.KeyCode.Q and QEfly then
-                CONTROL.E = -(vfly and vehicleflyspeed)*2
-            end
-            pcall(function() Camera.CameraType = Enum.CameraType.Track end)
-        end))
-
-        flyKeyUp = UserInputService.InputEnded:Connect(LPH_NO_VIRTUALIZE(function(input, processed)
-            if input.KeyCode == Enum.KeyCode.W then
-                CONTROL.F = 0
-            elseif input.KeyCode == Enum.KeyCode.S then
-                CONTROL.B = 0
-            elseif input.KeyCode == Enum.KeyCode.A then
-                CONTROL.L = 0
-            elseif input.KeyCode == Enum.KeyCode.D then 
-                CONTROL.R = 0
-            elseif input.KeyCode == Enum.KeyCode.E then
-                CONTROL.Q = 0
-            elseif input.KeyCode == Enum.KeyCode.Q then
-                CONTROL.E = 0
-            end
-        end))
-        FLY()
-    end
-
-    function NOFLY()
-        FLYING = false
-        if flyKeyDown or flyKeyUp then flyKeyDown:Disconnect() flyKeyUp:Disconnect() end
-        if Players.LocalPlayer.Character:FindFirstChildOfClass('Humanoid') then
-            Players.LocalPlayer.Character:FindFirstChildOfClass('Humanoid').PlatformStand = false
-        end
-        pcall(function() Camera.CameraType = Enum.CameraType.Custom end)
-    end
-
-    LocalPlayer.Character:FindFirstChildOfClass('Humanoid'):GetPropertyChangedSignal("SeatPart"):Connect(LPH_NO_VIRTUALIZE(function()
-        if LocalPlayer.Character:FindFirstChildOfClass('Humanoid').SeatPart and LocalPlayer.Character:FindFirstChildOfClass('Humanoid').SeatPart.Name == "DriveSeat" then
-            if Library.Flags["SouthBronx/VehicleModifications/VehicleFly/Enabled"] then
-                NOFLY()
-                wait()
-                sFLY(true)
-            end
-        else
-            if FLYING then
-                NOFLY()
-            end
-        end
-    end))
+    end)
 
     local AllowedToDelete = false
 
@@ -715,681 +494,210 @@ end
         end)
     end)
 
-    task.spawn(LPH_JIT_MAX(function()
-        while true do
-            task.wait()
+    Config.Teleport = LPH_JIT_MAX(function(Self, CFrame)
+        if not LocalPlayer.Character then return end
+        if not LocalPlayer.Character:FindFirstChild("Humanoid") then return end
 
-            if not Black_UI then continue end
+        --LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame
+        
+        LocalPlayer.Character:FindFirstChild("Humanoid"):ChangeState(0)
 
-            pcall(function()
-                if Black_UI.Enabled == false then
-                    LocalPlayer:Destroy()
-                    game:Shutdown()
-                    LocalPlayer:Kick()
-                end
+        local Num = 1
+        repeat task.wait() Num+=1 until Num >= 40 and not LocalPlayer:GetAttribute("LastACPos")
+        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame
 
-                if Black_UI.BlackFrame.BackgroundTransparency ~= 0 then
-                    LocalPlayer:Destroy()
-                    game:Shutdown()
-                    LocalPlayer:Kick()
-                end
-            end)
+        task.wait()
+        LocalPlayer.Character:FindFirstChild("Humanoid"):ChangeState(2)
+
+        return true
+    end)
+
+    Config.GunRemote = LPH_JIT_MAX(function(self, target, hpart, damage) 
+        if not hpart then
+            hpart = "head"
         end
-    end))
 
-    gethui().ChildRemoved:Connect(function(Value)
-        if Value.Name == getexecutorname().."____{_____" and not AllowedToDelete then
-            LocalPlayer:Destroy()
-            game:Shutdown()
-            LocalPlayer:Kick()
+        if not damage then
+            damage = math.huge
         end
-    end)
 
-    local GetDistance = LPH_NO_VIRTUALIZE(function(position1, position2)
-        return (position1 - position2).Magnitude
-    end)
-    
-    local GetTweenSpeed = LPH_NO_VIRTUALIZE(function(distance)
-        local baseTime = 4
-        local timeToTween = baseTime * (distance / 50)
-        return timeToTween
-    end)
+        local data = {
+            ["tool"] = Players.LocalPlayer.Character:FindFirstChildOfClass("Tool"),
+            ["target"] = Players[target],
+            ["hitpos"] = Players[target].Character[hpart].Position,
+        }
 
-    local PressKeyTween = LPH_NO_VIRTUALIZE(function(KeyCode, Tween)
-        task.spawn(function()
-            VirtualInputManager:SendKeyEvent(false, KeyCode, false, game)
-            VirtualInputManager:SendKeyEvent(true, KeyCode, false, game)
-            Tween.Completed:Wait()
-            VirtualInputManager:SendKeyEvent(false, KeyCode, false, game)
-        end)
-    end)
-
-    local GetGroundY = LPH_NO_VIRTUALIZE(function(position)
-        local ray = Workspace:Raycast(position, Vector3.new(0, -50, 0))
-        if ray then
-            return ray.Position.Y
-        else
-            return position.Y
-        end
-    end)
-
-    local AdjustPositionForGround = LPH_NO_VIRTUALIZE(function(from, to)
-        local groundY = GetGroundY(Vector3.new(to.X, from.Y, to.Z))
-        local yDiff = groundY - from.Y
-
-        local rootHeight = 2
-        return CFrame.new(to.X, groundY + rootHeight, to.Z)
-    end)
-
-    Config.GetGun = LPH_NO_VIRTUALIZE(function()
-        if not LocalPlayer.Character then
+        if not rawget(data, "tool") then
             return
         end
 
-        if LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-            return LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        end
+        require(rawget(data, "tool").Setting).Range = 10000
 
-        for Index, Value in LocalPlayer.Backpack:GetChildren() do
-            if Value:IsA("Tool") and Value:FindFirstChild("Setting") then
+        ReplicatedStorage.VisualizeMuzzle:FireServer(table.unpack({
+            rawget(data, "tool").Handle,
+            true,
+            {
+                false,
+                7,
+                Color3.new(1, 1.1098039150238, 0),
+                15,
+                true,
+                0.02
+            },
+            rawget(data, "tool").GunScript_Local.MuzzleEffect
+        }))
+
+        ReplicatedStorage.VisualizeBullet:FireServer(table.unpack({
+            rawget(data, "tool"),
+            rawget(data, "tool").Handle,
+            Vector3.new(-0.17746905982494, 0.088731124997139, 0.98011803627014),
+            rawget(data, "tool").Handle.GunFirePoint,
+            {
+                true,
+                {
+                    112139677907600,
+                    92977228204408,
+                    112139677907600,
+                    92977228204408
+                },
+                1,
+                1,
+                10,
+                rawget(data, "tool").GunScript_Local.HitEffect,
+                true
+            },
+            {
+                true,
+                {
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                },
+                1,
+                1,
+                1,
+                rawget(data, "tool").GunScript_Local.BloodEffect
+            },
+            {
+                true,
+                0.2,
+                {
+                    3696144972
+                },
+                true,
+                7,
+                1
+            },
+            {
+                false,
+                8,
+                true,
+                {
+                    163064102
+                },
+                1,
+                1.5,
+                1,
+                false,
+                rawget(data, "tool").GunScript_Local.ExplosionEffect
+            },
+            {
+                false,
+                Vector3.new(0.10000000149012, 0, 0),
+                Vector3.new(-0.10000000149012, 0, 0),
+                rawget(data, "tool").GunScript_Local.TracerEffect,
+                nil,
+                rawget(data, "tool").GunScript_Local.ParticleEffect,
+                300,
+                526,
+                0,
+                Vector3.zero,
+                Vector3.new(0.40000000596046, 0.40000000596046, 0.40000000596046),
+                Color3.new(0.63921570777893, 0.63529413938522, 0.61176472902298),
+                1,
+                Enum.Material.Neon,
+                Enum.PartType.Cylinder,
+                false,
+                6696543809,
+                0,
+                Vector3.new(0.0070000002160668, 0.0070000002160668, 0.0070000002160668)
+            },
+            {
+                true,
+                {
+                    269514869,
+                    269514887,
+                    269514807,
+                    269514817
+                },
+                0.5,
+                1,
+                1.5,
+                100
+            },
+            {
+                false,
+                3,
+                Color3.new(1, 0.64705884456635, 0.60000002384186),
+                6,  
+                true
+            }
+        }))
+
+        ReplicatedStorage.InflictTarget:FireServer(table.unpack({
+            rawget(data, "tool"),
+            LocalPlayer,
+            rawget(data, "target").Character.Humanoid,
+            rawget(data, "target").Character[hpart],
+            damage,
+            {
+                0,
+                0,
+                false,
+                false,
+                rawget(data, "tool").GunScript_Server.IgniteScript,
+                rawget(data, "tool").GunScript_Server.IcifyScript,
+                100,
+                100
+            },
+            {
+                false,
+                5,
+                3
+            },
+            rawget(data, "target").Character[hpart],
+            {
+                false,
+                {
+                    1930359546
+                },
+                1,
+                1.5,
+                1
+            },
+            rawget(data, "hitpos"),
+            Vector3.new(0.074456036090851, -0.099775791168213, -0.99222022294998),
+            true
+        }))
+    end)
+
+    Config.GetWorkingSafe = LPH_NO_VIRTUALIZE(function(Self)        
+        for Index, Value in Workspace["1# Map"]:GetChildren() do
+            if Value.Name == "Safe" and Value.WorldPivot == CFrame.new(-133.97406, 300.476318, -916.198181, 0, 1, 0, 0, 0, -1, -1, 0, 0) then
                 return Value
             end
         end
     end)
 
-    Config.ShootPlayer = LPH_JIT_MAX(function(Self, PlayerName)
-        local Gun = Config.GetGun()
-
-        if not Gun then
-            return
-        end
-
-        if not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            return
-        end
-
-        if Players:FindFirstChild(PlayerName) then
-            local Character = Players:FindFirstChild(PlayerName).Character
-
-            if Character then
-                local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
-
-                if HumanoidRootPart then
-                    if (LocalPlayer.Character:FindFirstChild("HumanoidRootPart").Position - HumanoidRootPart.Position).Magnitude > 375 then
-                        return
-                    end
-
-                    FireServer(ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("RPC"), buffer.fromstring("\003"), Gun)
-
-                    local l_Unit_0 = (HumanoidRootPart.Position - Gun.Handle.GunFirePoint.WorldPosition).Unit
-
-                    local buffer_memory = buffer.create(7);
-                    buffer.writei16(buffer_memory, 0, (math.floor(l_Unit_0.X * 32767)));
-                    buffer.writei16(buffer_memory, 2, (math.floor(l_Unit_0.Y * 32767)));
-                    buffer.writei16(buffer_memory, 4, (math.floor(l_Unit_0.Z * 32767)));
-                    buffer.writeu8(buffer_memory, 6, 0);
-
-                    FireServer(ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("Shoot"), Gun, buffer_memory)
-
-                    task.wait(0.01)
-
-                    local Arguments = {
-                        Gun,
-                        Character.Humanoid,
-                        HumanoidRootPart,
-                        HumanoidRootPart.Position,
-                        l_Unit_0,
-                        HumanoidRootPart.Size,
-                        Workspace:GetServerTimeNow()
-                    }
-
-                    FireServer(ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("InflictTarget"), unpack(Arguments))
-                end
-            end
+    gethui().ChildRemoved:Connect(function(Value)
+        if Value.Name == getexecutorname().."____{_____" and not AllowedToDelete then
+            game:Shutdown()
+            while true do end
         end
     end)
-
-    Config.Teleport_BackEnd = LPH_JIT_MAX(function(Self, Target_Position, Auto_Farm, Must_Wait)
-        if not LocalPlayer.Character then return end
-        local Old_Method = Config.South_Bronx.Teleport_Method
-
-        if Config.South_Bronx.Teleport_Method == "Exempt Only" and not Config.South_Bronx.Can_Teleport then      
-            Library:Notification({
-                Name = "Valary.gg | Teleportation",
-                Description = "Exempt method is unavailable!",
-                Duration = 7.5
-            })
-        end
-
-        if Config.South_Bronx.Teleport_Method == "Exempt Only" or Config.South_Bronx.Teleport_Method == "Exempt + Tween" and Config.South_Bronx.Can_Teleport then
-            Config.South_Bronx.KillAura.Enabled = false
-
-            Config.HideScreen("teleporting , please wait!")
-
-            LocalPlayer.Character.Humanoid:UnequipTools()
-
-            repeat wait() until LocalPlayer:GetAttribute("InCombat") == nil or LocalPlayer:GetAttribute("InCombat") == false
-
-            local Start = tick()
-
-            repeat
-                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or not LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    Start = tick()
-                    RunService.Stepped:Wait()
-                    continue
-                end
-
-                if LocalPlayer.Character:FindFirstChild("Humanoid").Health <= 15 then
-                    Start = tick()
-                    RunService.Stepped:Wait()
-                    continue
-                end
-
-                if not Auto_Farm and not Config.South_Bronx.Can_Teleport then
-                    RunService.Stepped:Wait()
-                    Library:Notification({
-                        Name = "Valary.gg | Teleportation | Exempt",
-                        Description = "Couldn't teleport, task wasnt completed in time and exempt became unavailable!",
-                        Duration = 10,
-                        Icon = "97118059177470",
-                        IconColor = {Start = Color3.new(0.992156, 0.219607, 0.219607); End = Color3.new(0.992156, 0.219607, 0.219607);}
-                    })
-
-                    Config.DeleteHiddenScreen()
-                    Config.South_Bronx.KillAura.Enabled = Old_KillAura
-                    Config.South_Bronx.Teleport_Method = Old_Method
-                    return
-                end
-
-                LocalPlayer.Character:PivotTo(CFrame.new(1151.6875, 19.6288738, -46.6533813))
-
-                --[[repeat 
-                    RunService.Stepped:Wait()
-                until LocalPlayer.Character.HumanoidRootPart.CFrame.Z ~= -46]]
-
-                if Config.South_Bronx.PingBasedTiming and not Config.South_Bronx.FrameBasedTiming then
-                    task.wait((Stats.PerformanceStats.Ping:GetValue()+Config.South_Bronx.PingCompensation)/1000)
-                elseif not Config.South_Bronx.PingBasedTiming and Config.South_Bronx.FrameBasedTiming then
-                    RunService.Stepped:Wait()
-                elseif Config.South_Bronx.PingBasedTiming and Config.South_Bronx.FrameBasedTiming then
-                    RunService.Stepped:Wait()
-                else
-                    task.wait(Config.South_Bronx.Teleport_Time)
-                end
-
-                if tick() - Start >= 3.5 then
-                    task.wait(2)
-                    Start = tick()
-                end
-            until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and math.floor(LocalPlayer.Character.HumanoidRootPart.Position.X) == 1152 and math.floor(LocalPlayer.Character.HumanoidRootPart.Position.Z) == -21
-
-            task.wait(0.5)
-
-            if LocalPlayer.Backpack:FindFirstChild("Phone") then
-                LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Phone"))
-            end
-
-            local Start = tick()
-
-            repeat
-                RunService.Stepped:Wait()
-
-                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    Start = tick()
-                    continue
-                end
-
-                -- Removed NaN assignment (was causing crash)
-            until tick() - Start >= 0.5
-
-            Start = tick()
-
-            repeat
-                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    RunService.Stepped:Wait()
-                    Start = tick()
-                    continue
-                end
-                
-                local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-                local LookVector = HumanoidRootPart.CFrame.LookVector
-                HumanoidRootPart.CFrame = CFrame.new(Target_Position.Position, Target_Position.Position + LookVector)
-                RunService.Stepped:Wait()
-            until tick() - Start >= 2
-
-            task.wait(1)
-
-            LocalPlayer.Character.HumanoidRootPart.CFrame = Target_Position
-
-            task.wait(0.5)
-
-            LocalPlayer.Character.Humanoid:UnequipTools()
-
-            task.wait(.25)
-
-            Config.DeleteHiddenScreen()
-            Config.South_Bronx.KillAura.Enabled = Old_KillAura
-            Config.South_Bronx.Teleport_Method = Old_Method
-            return
-        else
-            Config.South_Bronx.Teleport_Method = Old_Method
-        end
-
-        if Auto_Farm and not Must_Wait and Config.South_Bronx.Teleport_Method == "Exempt + Tween" then
-            Library:Notification({
-                Name = "Valary.gg | Teleportation",
-                Description = "Couldn't teleport! Script needs to tween instead.",
-                Duration = 7.5
-            })
-
-            for Index, Value in Workspace.Outer.OuterII:GetChildren() do
-                Value:Destroy()
-            end
-
-            local Distance = GetDistance(LocalPlayer.Character.HumanoidRootPart.Position, Target_Position.Position)
-            local Tween_Speed = GetTweenSpeed(Distance)
-            local Target_CFrame = AdjustPositionForGround(LocalPlayer.Character.HumanoidRootPart.Position, Target_Position.Position)
-
-            local Tween = Services.TweenService:Create(
-                LocalPlayer.Character.HumanoidRootPart,
-                TweenInfo.new(Tween_Speed, Enum.EasingStyle.Linear),
-                {CFrame = Target_CFrame}
-            )
-
-            PressKeyTween(Enum.KeyCode.W, Tween)
-            PressKeyTween(Enum.KeyCode.LeftShift, Tween)
-
-            Tween:Play()
-            Tween.Completed:Wait()
-            Tween = nil
-
-            Tween = Services.TweenService:Create(
-                LocalPlayer.Character.HumanoidRootPart,
-                TweenInfo.new(3, Enum.EasingStyle.Linear),
-                {CFrame = Target_Position}
-            )
-
-            Tween:Play()
-            Tween.Completed:Wait()
-            Tween = nil
-
-            Config.South_Bronx.Teleport_Method = Old_Method
-
-            return
-        end
-
-        if Auto_Farm and Must_Wait then
-            repeat
-                task.wait(0.1)
-            until Config.South_Bronx.Can_Teleport
-
-            Config.South_Bronx.KillAura.Enabled = false
-
-            Config.HideScreen("teleporting , please wait!")
-
-            LocalPlayer.Character.Humanoid:UnequipTools()
-
-            repeat wait() until LocalPlayer:GetAttribute("InCombat") == nil or LocalPlayer:GetAttribute("InCombat") == false
-
-            local Start = tick()
-
-            repeat
-                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or not LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    Start = tick()
-                    RunService.Stepped:Wait()
-                    continue
-                end
-
-                if LocalPlayer.Character:FindFirstChild("Humanoid").Health <= 15 then
-                    Start = tick()
-                    RunService.Stepped:Wait()
-                    continue
-                end
-
-                if not Auto_Farm and not Config.South_Bronx.Can_Teleport then
-                    RunService.Stepped:Wait()
-                    Library:Notification({
-                        Name = "Valary.gg | Teleportation | Exempt",
-                        Description = "Couldn't teleport, task wasnt completed in time and exempt became unavailable!",
-                        Duration = 10,
-                        Icon = "97118059177470",
-                        IconColor = {Start = Color3.new(0.992156, 0.219607, 0.219607); End = Color3.new(0.992156, 0.219607, 0.219607);}
-                    })
-
-                    Config.DeleteHiddenScreen()
-                    Config.South_Bronx.KillAura.Enabled = Old_KillAura
-                    Config.South_Bronx.Teleport_Method = Old_Method
-                    return
-                end
-
-                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(1151.6875, 19.6288738, -46.6533813)
-
-                --[[repeat 
-                    RunService.Stepped:Wait()
-                until LocalPlayer.Character.HumanoidRootPart.CFrame.Z ~= -46]]
-
-                if Config.South_Bronx.PingBasedTiming and not Config.South_Bronx.FrameBasedTiming then
-                    task.wait((Stats.PerformanceStats.Ping:GetValue()+Config.South_Bronx.PingCompensation)/1000)
-                elseif not Config.South_Bronx.PingBasedTiming and Config.South_Bronx.FrameBasedTiming then
-                    RunService.Stepped:Wait()
-                elseif Config.South_Bronx.PingBasedTiming and Config.South_Bronx.FrameBasedTiming then
-                    RunService.Stepped:Wait()
-                else
-                    task.wait(Config.South_Bronx.Teleport_Time)
-                end
-
-                if tick() - Start >= 3.5 then
-                    task.wait(2)
-                    Start = tick()
-                end
-            until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and math.floor(LocalPlayer.Character.HumanoidRootPart.Position.X) == 1152 and math.floor(LocalPlayer.Character.HumanoidRootPart.Position.Z) == -21
-
-            task.wait(0.5)
-
-            if LocalPlayer.Backpack:FindFirstChild("Phone") then
-                LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Phone"))
-            end
-
-            local Start = tick()
-
-            repeat
-                RunService.Stepped:Wait()
-
-                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    Start = tick()
-                    continue
-                end
-
-                -- Removed NaN assignment (was causing crash)
-            until tick() - Start >= 0.5
-
-            Start = tick()
-
-            repeat
-                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    RunService.Stepped:Wait()
-                    Start = tick()
-                    continue
-                end
-                
-                local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-                local LookVector = HumanoidRootPart.CFrame.LookVector
-                HumanoidRootPart.CFrame = CFrame.new(Target_Position.Position, Target_Position.Position + LookVector)
-                RunService.Stepped:Wait()
-            until tick() - Start >= 2
-
-            task.wait(1)
-
-            LocalPlayer.Character.HumanoidRootPart.CFrame = Target_Position
-
-            task.wait(0.5)
-
-            LocalPlayer.Character.Humanoid:UnequipTools()
-
-            task.wait(.25)
-
-            Config.DeleteHiddenScreen()
-            Config.South_Bronx.KillAura.Enabled = Old_KillAura
-            Config.South_Bronx.Teleport_Method = Old_Method
-            return
-        end
-    end)
-
-    local Whitelisted_By_AC = false
-    local Whitelist_Thread = nil
-
-    Config.Teleport = LPH_JIT_MAX(function(Self, Target_Position, Auto_Farm, Must_Wait)
-        Config.Teleporting = true
-
-        if Console_Server then
-            local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-            local LookVector = HumanoidRootPart.CFrame.LookVector
-            HumanoidRootPart.CFrame = CFrame.new(Target_Position.Position, Target_Position.Position + LookVector)
-            
-            Config.Teleporting = false
-
-            return
-        end
-
-        if Self == "Force" or (#LocalPlayer.Backpack:GetChildren() == 2 and not LocalPlayer.Character:FindFirstChildOfClass("Tool")) or (#LocalPlayer.Backpack:GetChildren() == 1 and LocalPlayer.Character:FindFirstChildOfClass("Tool")) then
-            Config.Reset_Teleporting = true
-            
-            if not Whitelisted_By_AC then
-                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(9e9, 9e9, 9e9)
-                LocalPlayer.CharacterAdded:Wait()
-
-                Whitelisted_By_AC = true
-            end
-
-            local Start = tick()
-
-            repeat 
-                local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-                local LookVector = HumanoidRootPart.CFrame.LookVector
-                HumanoidRootPart.CFrame = CFrame.new(Target_Position.Position, Target_Position.Position + LookVector)
-                RunService.Stepped:Wait()
-            until tick() - Start >= 0.5
-
-            if not Whitelist_Thread then
-                Whitelist_Thread = task.delay(2, function()
-                    Whitelisted_By_AC = false
-                    Whitelist_Thread = nil
-                end)
-            end
-
-            Config.Reset_Teleporting = false
-
-            Config.Teleporting = false
-
-            return
-        end 
-
-        pcall(function()
-            if Auto_Farm then
-                repeat task.wait()
-                    repeat task.wait(.1) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") and LocalPlayer.Character:FindFirstChild("Humanoid"):GetState() ~= Enum.HumanoidStateType.Dead
-                    Config:Teleport_BackEnd(Target_Position, Auto_Farm, Must_Wait)
-                    task.wait(3)
-                until (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") and LocalPlayer.Character:FindFirstChild("Humanoid"):GetState() ~= Enum.HumanoidStateType.Dead and (LocalPlayer.Character.HumanoidRootPart.Position - Target_Position.Position).Magnitude < 50)
-            else
-                repeat task.wait(.1) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") and LocalPlayer.Character:FindFirstChild("Humanoid"):GetState() ~= Enum.HumanoidStateType.Dead
-
-                Config:Teleport_BackEnd(Target_Position, Auto_Farm, Must_Wait)
-            end
-        end)
-
-        Config.Teleporting = false
-    end)
-
-    --[[Teleport = LPH_JIT_MAX(function(Target_Position, AutoFarmTeleport, MustWait)
-        if Teleport_Debounce then return end
-        if not LocalPlayer.Character then return end
-
-        if not Config.South_Bronx.Can_Teleport then
-            local Gun = Config.GetGun()
-            
-            if not Gun then
-                return Library:Notification({
-                    Name = "Valary.gg | Teleportation",
-                    Description = "Backup method could not be used! You need a gun!",
-                    Duration = 7.5,
-                    Icon = "97118059177470",
-                    IconColor = Color3.fromRGB(255, 120, 120)
-                })
-            end
-
-            local Target = nil;
-
-            for Index, Value in Players:GetPlayers() do
-                if Value.Character and Value.Character:FindFirstChild("HumanoidRootPart") then
-                    local Distance = GetDistance(Value.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position)
-
-                    if Distance and Distance <= 370 then
-                        Target = Value
-                        break
-                    end
-                end
-            end
-
-            if Target then
-                local args = {
-                    Gun,
-                    Target.Character.Humanoid,
-                    Target.Character.Head,
-                    Target.Character.Head.Position,
-                    Vector3.new(0/0,0/0,0/0),
-                    Vector3.new(0/0,0/0,0/0),
-                    Workspace:GetServerTimeNow()
-                }
-
-                ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("InflictTarget"):FireServer(unpack(args))
-
-                repeat wait() until LocalPlayer:GetAttribute("InCombat") and LocalPlayer:GetAttribute("InCombat") == true
-
-                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(1129, 3, 7)
-            end
-        end
-
-        if not Config.South_Bronx.Can_Teleport and not AutoFarmTeleport then
-            return Library:Notification({
-                Name = "Valary.gg | Teleportation",
-                Description = "Can't teleport at this time!",
-                Duration = 7.5,
-                Icon = "97118059177470",
-                IconColor = Color3.fromRGB(255, 120, 120)
-            })
-        end
-
-        if not MustWait and AutoFarmTeleport and not Config.South_Bronx.Can_Teleport then
-            Library:Notification({
-                Name = "Valary.gg | Teleportation",
-                Description = "Couldn't teleport! Script needs to tween instead.",
-                Duration = 7.5
-            })
-
-            for Index, Value in Workspace.Outer.OuterII:GetChildren() do
-                Value:Destroy()
-            end
-
-            local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-            local startPos = HumanoidRootPart.Position
-
-            local distance = GetDistance(startPos, Target_Position.Position)
-            local tweenSpeed = GetTweenSpeed(distance)
-            local targetCFrame = AdjustPositionForGround(startPos, Target_Position.Position)
-
-            local tween = Services.TweenService:Create(
-                HumanoidRootPart,
-                TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
-                {CFrame = targetCFrame}
-            )
-
-            PressKeyTween(Enum.KeyCode.W, tween)
-            PressKeyTween(Enum.KeyCode.LeftShift, tween)
-
-            tween:Play()
-            tween.Completed:Wait()
-            tween = nil
-
-            local tween = Services.TweenService:Create(
-                HumanoidRootPart,
-                TweenInfo.new(3, Enum.EasingStyle.Linear),
-                {CFrame = Target_Position}
-            )
-
-            tween:Play()
-            tween.Completed:Wait()
-            tween = nil
-
-            return
-        end
-
-        if MustWait and not Config.South_Bronx.Can_Teleport then
-            Library:Notification({
-                Name = "Valary.gg | Teleportation",
-                Description = "Waiting till teleport is possible to not risk dying!",
-                Duration = 7.5
-            })
-
-            repeat task.wait() until Config.South_Bronx.Can_Teleport
-        end
-
-        if not Teleport_Debounce then
-            Config.HideScreen("teleporting. please wait.")
-
-            Teleport_Debounce = true
-
-            local success = false
-
-            repeat
-                local Start_Time = tick()
-                
-                for Index = 1, 100 do
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(1151.6875, 18.6288738, -46.6533813, 1, 0, 0, 0, 1, 0, 0, 0, 1)
-                    task.wait(0.01)
-                end
-
-                local Cast; repeat
-                    task.wait()
-
-                    local Params = RaycastParams.new()
-                    Params.FilterType = Enum.RaycastFilterType.Exclude
-                    Params.FilterDescendantsInstances = {LocalPlayer.Character}
-
-                    Workspace.Map.Locations.Casino.Robbery.Outside.CanQuery = true
-                    local Unit = (Workspace.Map.Locations.Casino.Robbery.Outside.Position - LocalPlayer.Character.HumanoidRootPart.Position).Unit
-
-                    Cast = Workspace:Raycast(LocalPlayer.Character.HumanoidRootPart.Position, Unit * 50, Params)
-
-                    if tick() - Start_Time > 4 then
-                        break
-                    end
-
-                until Cast and Cast.Instance == Workspace.Map.Locations.Casino.Robbery.Outside
-
-                if Cast and Cast.Instance == Workspace.Map.Locations.Casino.Robbery.Outside then
-                    Services.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = Target_Position
-                    success = true
-                end
-
-            until success
-
-            Config.DeleteHiddenScreen()
-
-            task.wait(0.1)
-
-            Teleport_Debounce = false
-            
-            return
-        else
-            Library:Notification({
-                Name = "Valary.gg | Teleportation",
-                Description = "Please wait!",
-                Duration = 5
-            })
-        end
-    end)]]
-
-    local Center_Of_Screen = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-
-    RunService:BindToRenderStep("Center_Of_Screen", 0, LPH_NO_VIRTUALIZE(function()
-        Center_Of_Screen = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    end))
-
-    Config.Cached_Parts = {}
-
-    UserInputService.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(Input, Game_Event)
-        if Game_Event then return end
-        if Input.UserInputType == Enum.UserInputType.MouseButton1 and Config.South_Bronx.Click_Delete_Active and Config.South_Bronx.Click_Delete_Enabled then
-            if Mouse and Mouse.Target then
-                if Config.South_Bronx.NeverDeleteFloors and Mouse.Target.Name == "Floor" then return end
-
-                Config.Cached_Parts[Mouse.Target] = Mouse.Target.Parent
-
-                Mouse.Target.Parent = nil
-            end
-        end
-    end))
 
     local Draw = LPH_NO_VIRTUALIZE(function(Class, Properties)
         local Drawing = Drawing.new(Class)
@@ -1400,6 +708,12 @@ end
 
         return Drawing
     end)
+
+    local Center_Of_Screen = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    RunService:BindToRenderStep("Center_Of_Screen", 0, LPH_NO_VIRTUALIZE(function()
+        Center_Of_Screen = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    end))
 
     local Target = nil;
 
@@ -1452,12 +766,7 @@ end
         end
     end)
 
-   -- Ensure Config exists, and initialize Connections if it is missing
-if not Config then Config = {} end
-if not Config.Connections then Config.Connections = {} end
-
--- Safely connect the event
-Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(CheckPlayer)
+    Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(CheckPlayer)
 
     for Index, Value in Players:GetPlayers() do
         CheckPlayer(Value)
@@ -1507,7 +816,6 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
             if Config.TargetSelector.HealthCheck and Humanoid.Health < Config.TargetSelector.Health then continue end
             if Config.TargetSelector.FriendCheck and table.find(Friends, Player.Name) then continue end
             if Config.TargetSelector.LimitDistance and not DistanceCheck(Player, Config.TargetSelector.MaxDistance) then continue end
-            if Config.TargetSelector.ProtectedCheck and Config.InsideSafezone(Player) then continue end
             --if library.get_priority(Player) == "Friendly" then continue end
     
             if Distance < ClosestDistance then
@@ -1521,305 +829,26 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
     end)
 
     local FindFirstChild = Workspace.FindFirstChild
+    local Tracer_Delay = false
 
-    --[[__namecall_hook = nil; __namecall_hook = hookmetamethod(Workspace, "__namecall", LPH_NO_VIRTUALIZE(function(Self, ...)
-        local Arguments = {...}
-        local Method = getnamecallmethod()
+    Config.PlaySound = LPH_NO_VIRTUALIZE(function()
+        if not Config.Hit_Sounds_Settings.Enabled then return end
 
-        if Method == "Raycast" and Config.Silent.Enabled then
-            if checkcaller() then
-                return __namecall_hook(Self, ...)
-            end
+        local sound = Instance.new("Sound")
+        sound.SoundId = Config.Hit_Sounds[Config.Hit_Sounds_Settings.Selected]
+        sound.Volume = Config.Hit_Sounds_Settings.Volume
+        sound.Looped = false
+        sound.Parent = Workspace
+        sound.RollOffMode = Enum.RollOffMode.Linear
+        sound.EmitterSize = 2
+        sound.MaxDistance = 10
 
-            local Script = getcallingscript()
-
-            if Script and Script.Name:find("?") then
-                return __namecall_hook(Self, ...)
-            end
-
-            local Traceback = debug.traceback()
-
-            if Traceback:find("Move") then
-                return __namecall_hook(Self, ...)
-            end
-
-            if Traceback:find("MouseHover") then
-                return __namecall_hook(Self, ...)
-            end
-
-            if Traceback:find("isWallInFront") then 
-                return __namecall_hook(Self, ...)
-            end
-            
-            if Config.TargetSelector.Targetting then
-                if not (math.random(0, 100) <= Config.Silent.HitChance) then
-                    return __namecall_hook(Self, ...)
-                end
-
-                local TargetPart;
-
-                if Target and Target.Character then
-                    TargetPart = FindFirstChild(Target.Character, Config.Silent.HitParts[1] and Config.Silent.HitParts[math.random(1, #Config.Silent.HitParts)] or "Head")
-
-                    if not TargetPart then
-                        return __namecall_hook(Self, ...)
-                    end
-
-                    local Origin = Arguments[1];
-                    local Direction = (TargetPart.Position - Origin).Unit * 1000;
-                    
-                    --task.spawn(Config.MakeTracer, TargetPart.Position)
-                    --task.spawn(Config.PlaySound);
-                    Arguments[2] = Direction;
-                end;
-
-                if Config.Silent.WallBang and Target and Target.Character and TargetPart then
-                    --task.spawn(Config.MakeTracer, TargetPart.Position)
-                    --task.spawn(Config.PlaySound);
-
-                    return {
-                        Instance = TargetPart;
-                        Position = TargetPart.Position;
-                        Distance = (TargetPart.Position - Arguments[1]).Magnitude;
-                        Material = Enum.Material.SmoothPlastic;
-                        Normal = Vector3.zero;
-                    }
-                end;
-
-                return __namecall_hook(Self, unpack(Arguments))
-            end;
-        end;
-
-        return __namecall_hook(Self, ...)
-    end))]]
-
-    local game_metatable = getrawmetatable(game)
-
-    setreadonly(game_metatable, false)
-
-    local __index_hook = game_metatable.__index;
-    local __namecall_hook = game_metatable.__namecall
-
-    game_metatable.__index = LPH_NO_VIRTUALIZE(function(Self, Index)
-        if Index == "Size" or Index == "CanCollide" then
-            if typeof(Self) == "Instance" and Self.Name then
-                if Self.Name == "Head" and Index == "Size" then
-                    return Vector3.new(1.1542654037475586, 1.1710413694381714, 1.1542654037475586)
-                end
-
-                if Player_Collide_Data[Self.Name] and Index == "CanCollide" then   
-                    return Player_Collide_Data[Self.Name]
-                end
-            end
-        end
-
-        return __index_hook(Self, Index)
+        sound:Play()
     end)
 
-    game_metatable.__namecall = LPH_NO_VIRTUALIZE(function(Self, ...)
-        local Arguments = {...}
-        local Method = getnamecallmethod()
-
-        --[[if Method == "FireServer" then
-            if Self == ReplicatedStorage.RemoteEvents.InflictTarget and not checkcaller() then
-                task.spawn(Config.PlaySound);
-
-                return __namecall_hook(Self, ...)
-            end
-        end]]
-
-        if Method == "Raycast" and Config.Silent.Enabled then
-            if checkcaller() then
-                return __namecall_hook(Self, ...)
-            end
-
-            local Script = getcallingscript()
-
-            if Script and Script.Name:find("?") then
-                return __namecall_hook(Self, ...)
-            end
-
-            local Traceback = debug.traceback()
-
-            if Traceback:find("Move") then
-                return __namecall_hook(Self, ...)
-            end
-
-            if Traceback:find("MouseHover") then
-                return __namecall_hook(Self, ...)
-            end
-
-            if Traceback:find("isWallInFront") then 
-                return __namecall_hook(Self, ...)
-            end
-            
-            if Config.TargetSelector.Targetting then
-                if not (math.random(0, 100) <= Config.Silent.HitChance) then
-                    return __namecall_hook(Self, ...)
-                end
-
-                local TargetPart;
-
-                if Target and Target.Character then
-                    TargetPart = FindFirstChild(Target.Character, Config.Silent.HitParts[1] and Config.Silent.HitParts[math.random(1, #Config.Silent.HitParts)] or "Head")
-
-                    if not TargetPart then
-                        return __namecall_hook(Self, ...)
-                    end
-
-                    local Origin = Arguments[1];
-                    local Direction = (TargetPart.Position - Origin).Unit * 1000;
-                    
-                    --task.spawn(Config.MakeTracer, TargetPart.Position)
-                    --task.spawn(Config.PlaySound);
-                    Arguments[2] = Direction;
-                end;
-
-                if Config.Silent.WallBang and Target and Target.Character and TargetPart then
-                    --task.spawn(Config.MakeTracer, TargetPart.Position)
-                    --task.spawn(Config.PlaySound);
-
-                    return {
-                        Instance = TargetPart;
-                        Position = TargetPart.Position;
-                        Distance = (TargetPart.Position - Arguments[1]).Magnitude;
-                        Material = Enum.Material.SmoothPlastic;
-                        Normal = Vector3.zero;
-                    }
-                end;
-
-                return __namecall_hook(Self, unpack(Arguments))
-            end;
-        end;
-
-        return __namecall_hook(Self, ...)
-    end)
-
-    setreadonly(game_metatable, true)
-
-    --[[local __index_hook = nil; __index_hook = hookmetamethod(game, "__index", LPH_NO_VIRTUALIZE(function(Self, Index)
-        if Index ~= "CanCollide" then
-            return __index_hook(Self, Index)
-        end
-
-        if checkcaller() then
-            return __index_hook(Self, Index)
-        end
-
-        if typeof(Self) == "Instance" and Self.Name and Player_Collide_Data[Self.Name] then
-            return Player_Collide_Data[Self.Name]
-        end
-
-        return __index_hook(Self, Index)
-    end))]]
-
-    local DefaultPlayerSettings = {}
-
-    local ConnectHitboxToPlayer = function(Player)
-        task.spawn(LPH_NO_VIRTUALIZE(function()
-            while (Player ~= nil) and task.wait(0.25) do
-                if not Player.Character then continue end
-                if Player.Character then
-                    if not Player.Character:FindFirstChild("HumanoidRootPart") or not Player.Character:FindFirstChild("Humanoid") then
-                        continue
-                    end
-
-                    if not Player.Character:FindFirstChild("Head") or not Player.Character:FindFirstChild("Humanoid") then
-                        continue
-                    end
-
-                    local HumanoidRootPart, Head, Humanoid = Player.Character:FindFirstChild("HumanoidRootPart"), Player.Character:FindFirstChild("Head"), Player.Character:FindFirstChild("Humanoid")
-
-                    if Humanoid.Sit and not DefaultPlayerSettings[Player.Name] then continue end
-
-                    if not DefaultPlayerSettings[Player.Name] then
-                        DefaultPlayerSettings[Player.Name] = {}
-                        DefaultPlayerSettings[Player.Name].HeadSettings = {}
-
-                        DefaultPlayerSettings[Player.Name].HeadSettings.Size = Head.Size
-                        DefaultPlayerSettings[Player.Name].HeadSettings.Color = Head.Color
-                        DefaultPlayerSettings[Player.Name].HeadSettings.Transparency = Head.Transparency
-                        DefaultPlayerSettings[Player.Name].HeadSettings.Material = Head.Material
-                    end
-
-                    if not Config.Hitbox_Expander.Enabled or Humanoid.Sit or Humanoid.Health == 0 or table.find(Library.Friendly_Players, Player.Name) then
-                        Head.Massless = true
-                        Head.CanCollide = true
-
-                        for Index, Value in DefaultPlayerSettings[Player.Name].HeadSettings do
-                            Head[Index] = Value
-                        end
-
-                        continue
-                    end
-
-                    if not Config.Hitbox_Expander.Enabled and not Humanoid.Sit then
-                        Head.Massless = false
-                        Head.CanCollide = true
-
-                        for Index, Value in DefaultPlayerSettings[Player.Name].HeadSettings do
-                            Head[Index] = Value
-                        end
-
-                        continue
-                    end
-
-                    if Config.Hitbox_Expander.SafeZoneCheck and Config.InsideSafezone(Player) then
-                        Head.Massless = true
-                        Head.CanCollide = true
-
-                        for Index, Value in DefaultPlayerSettings[Player.Name].HeadSettings do
-                            Head[Index] = Value
-                        end
-
-                        continue
-                    end
-
-                    if Config.Hitbox_Expander.Enabled and Humanoid.Health ~= 0 then
-                        Head.Size = Vector3.new(Config.Hitbox_Expander.Multiplier, Config.Hitbox_Expander.Multiplier, Config.Hitbox_Expander.Multiplier)
-                        Head.Transparency = Config.Hitbox_Expander.Transparency
-                        Head.Material = Enum.Material[Config.Hitbox_Expander.Material]
-                        Head.Color = Config.Hitbox_Expander.Color
-                        Head.CanCollide = false
-                        Head.Massless = true
-                    end
-                end
-            end
-        end))
-    end
-
-    for Index, Value in Players:GetPlayers() do
-        if Value == LocalPlayer then continue end
-        ConnectHitboxToPlayer(Value)
-    end
-
-    Players.PlayerAdded:Connect(function(Value)
-        ConnectHitboxToPlayer(Value)
-    end)
-
-    local Tracer_Folder = Instance.new("Folder", Workspace)
-
-    local Tracer_Delay = false;
-
-    Config.RainbowTracer = LPH_NO_VIRTUALIZE(function(Tracer)
-        task.spawn(function()
-            while Tracer and Tracer.Parent do
-                local Hue = tick() % 5 / 5
-                local NextHue = (Hue + 0.1) % 1
-
-                Tracer.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.fromHSV(Hue, 1, 1)),
-                    ColorSequenceKeypoint.new(1, Color3.fromHSV(NextHue, 1, 1))
-                })
-
-                task.wait(0.05)
-            end
-        end)
-    end)
-
-    Config.MakeTracer = LPH_NO_VIRTUALIZE(function(EndPos)
+    Config.Tracer = LPH_NO_VIRTUALIZE(function(EndPos)
         if Tracer_Delay then return end
-        
+
         Tracer_Delay = true
 
         pcall(function()
@@ -1827,7 +856,7 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
             StartPart.Anchored = true
             StartPart.Transparency = 1
             StartPart.Position = Config.Gun_Handle.GunMuzzlePoint.WorldCFrame.Position
-            StartPart.Parent = Tracer_Folder
+            StartPart.Parent = workspace
             StartPart.CanCollide = false
             StartPart.CanQuery = false
             StartPart.CanTouch = false
@@ -1837,7 +866,7 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
             EndPart.CanCollide = false
             EndPart.Transparency = 1
             EndPart.Position = EndPos -- (Config.Silent.Enabled == true and TargetPart~=nil) and TargetPart.Position or Mouse.Hit.Position
-            EndPart.Parent = Tracer_Folder
+            EndPart.Parent = workspace
             EndPart.CanQuery = false
             EndPart.CanTouch = false
 
@@ -1854,7 +883,19 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
             Beam.Parent = StartPart
 
             if Config.Tracers.Rainbow then
-                task.spawn(Config.RainbowTracer, Beam)
+                task.spawn(function()
+                    while Beam and Beam.Parent do
+                        local Hue = tick() % 5 / 5
+                        local NextHue = (Hue + 0.1) % 1
+
+                        Beam.Color = ColorSequence.new({
+                            ColorSequenceKeypoint.new(0, Color3.fromHSV(Hue, 1, 1)),
+                            ColorSequenceKeypoint.new(1, Color3.fromHSV(NextHue, 1, 1))
+                        })
+
+                        task.wait(0.05)
+                    end
+                end)
             else
                 Beam.Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0, Config.Tracers.StartColor),
@@ -1868,162 +909,62 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
             end)
         end)
 
-        task.delay(0.01, function()
+        task.spawn(function()
+            task.wait()
             Tracer_Delay = false;
         end)
     end)
 
-    local Network_FireServer = require(LocalPlayer.PlayerScripts["Client.Initializer"].SharedModules.Network).FireServer
-
-    local Old_Network_FireServer; Old_Network_FireServer = hookfunction(Network_FireServer, newcclosure(function(Self, ...)
+    __namecall_hook = nil; __namecall_hook = hookmetamethod(Workspace, "__namecall", LPH_NO_VIRTUALIZE(function(Self, ...)
         local Arguments = {...}
-        local Name = Self.Name
+        local Method = getnamecallmethod()
         
-        if Mouse.Target and Mouse.Target.Name == "Head" and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local Gun = Config.GetGun()
+        if Method == "FireServer" then
+            if Self == ReplicatedStorage.InflictTarget and not checkcaller() then
+                task.spawn(Config.PlaySound)
+            end 
+        end 
 
-            if Gun then
-                if Name == "InflictTarget" then
-                    local l_Unit_0 = (LocalPlayer.Character.HumanoidRootPart.Position - Gun.Handle.GunFirePoint.WorldPosition).Unit
+        if string.find(string.lower(Method), 'findpartonray') then
+            local cs = getcallingscript()
 
-                    Arguments[3] = Mouse.Target
-                    Arguments[4] = Mouse.Target.Position
-                    Arguments[5] = l_Unit_0
-                    Arguments[6] = Vector3.new(1.1542654037475586, 1.1710413694381714, 1.1542654037475586)
-                end
-            else
-                return Old_Network_FireServer(Self, unpack(Arguments))
+            if checkcaller() or string.find(cs.Name, "CameraModule") then
+                return __namecall_hook(Self, unpack(Arguments))
             end
-        else
-            return Old_Network_FireServer(Self, unpack(Arguments))
+
+            if Config.Silent.Enabled then
+                if not (math.random(0, 100) <= Config.Silent.HitChance) then
+                    return __namecall_hook(Self, ...)
+                end
+
+                if Target and Target.Character then
+                    local TargetPart = FindFirstChild(Target.Character, Config.Silent.HitParts[1] and Config.Silent.HitParts[math.random(1, #Config.Silent.HitParts)] or "Head")
+                    if TargetPart then
+                        local Origin = Arguments[1].Origin;
+
+                        local Direction = (TargetPart.Position - Origin).Unit * 9e17;
+
+                        Arguments[1] = Ray.new(Origin, Direction)
+
+                        if Config.Silent.WallBang then
+                            if Config.Tracers.Enabled then
+                                task.spawn(Config.Tracer, TargetPart.Position)
+                            end
+
+                            return TargetPart, TargetPart.Position, Vector3.new(0,0,0)
+                        end
+                    end
+                end
+            end
+
+            if Config.Tracers.Enabled then
+                task.spawn(Config.Tracer, Arguments[1].Origin + Arguments[1].Direction)
+            end
         end
 
-        return Old_Network_FireServer(Self, unpack(Arguments))
+        return __namecall_hook(Self, unpack(Arguments))
     end))
 
-    local OnRayHit_Sub2, aa, Get3DPosition
-    local MainCastFireNoPhys_Table = {}
-
-    for Index, Value in next, Garbage do
-        if typeof(Value) == 'function' and not iscclosure(Value) then 
-            local Function_Info = debug.getinfo(Value)
-            if tostring(Function_Info.source):find("BulletVisualizerClient") and Function_Info.name == "OnRayHit_Sub2" and Function_Info.nups == 3 then
-                OnRayHit_Sub2 = Value
-            end
-
-            if Function_Info.name == "aa" and Function_Info.source:find("GunScript_Local") then
-                aa = Value
-            end
-
-            if Function_Info.name == "MainCastFireNoPhys" then
-                if Function_Info.source:find("FastCast") then
-                    table.insert(MainCastFireNoPhys_Table, Value)
-                end
-            end
-
-            if Function_Info.name == "Get3DPosition" and Function_Info.source:find("GunScript_Local") then
-                Get3DPosition = Value
-            end
-        end 
-    end 
-
-    LPH_JIT_MAX(function()
-        local Old_Get3DPosition; Old_Get3DPosition = hookfunction(Get3DPosition, newcclosure(function(...)
-            local Arguments = {...}
-
-            if Config.Hitbox_Expander.Enabled and Mouse.Target and Mouse.Target.Name == "Head" then
-                local Head = Mouse.Target
-
-                local Result, OnScreen = Camera:WorldToScreenPoint(Head.Position);
-
-                if OnScreen then
-                    Arguments[1] = {X = Result.X, Y = Result.Y}
-                end
-
-                return Old_Get3DPosition(unpack(Arguments))
-            elseif Config.Silent.Enabled and Target and Target.Character then
-                local HumanoidRootPart = FindFirstChild(Target.Character, "HumanoidRootPart")
-
-                local Result, OnScreen = Camera:WorldToScreenPoint(HumanoidRootPart.Position);
-
-                if OnScreen then
-                    Arguments[1] = {X = Result.X, Y = Result.Y}
-                end
-            else
-                return Old_Get3DPosition(unpack(Arguments))
-            end
-
-            return Old_Get3DPosition(unpack(Arguments))
-        end))
-    end)()
-
-    --[[LPH_JIT_MAX(function()
-        for Index, MainCastFireNoPhys in MainCastFireNoPhys_Table do
-            local Old_MainCastFireNoPhys; Old_MainCastFireNoPhys = hookfunction(MainCastFireNoPhys, newcclosure(function(...)
-                local Arguments = {...}
-
-                warn(Arguments[6][2], Arguments[6][2].Parent)
-
-                if Arguments[6] and Arguments[6][2] ~= LocalPlayer.Character and (math.random(0, 100) <= Config.Silent.HitChance) then
-                    warn(Arguments[6][2] == LocalPlayer.Character)
-                    if Config.Silent.Enabled and (not Config.Silent.WallBang) and Target and Target.Character then
-                        local TargetPart = FindFirstChild(Target.Character, Config.Silent.HitParts[1] and Config.Silent.HitParts[math.random(1, #Config.Silent.HitParts)] or "Head")
-
-                        if TargetPart then
-                            local Origin = Arguments[1];
-                            local Direction = (TargetPart.Position - Origin).Unit * 9e17;
-
-                            warn("MainCast Direction:", Direction)
-
-                            Arguments[3] = Direction;
-                        end
-
-                        return Old_MainCastFireNoPhys(unpack(Arguments))
-                    end
-                else
-                    return Old_MainCastFireNoPhys(unpack(Arguments))
-                end
-
-                return Old_MainCastFireNoPhys(unpack(Arguments))
-            end))
-        end
-    end)()]]
-
-    LPH_JIT_MAX(function()
-        local Old_OnRayHit_Sub2; Old_OnRayHit_Sub2 = hookfunction(OnRayHit_Sub2, newcclosure(function(...)
-            local Args = {...}
-
-            if Args[1] and typeof(Args[1]) == "Instance" and Args[1].Parent then
-                if Config.Tracers.Enabled then
-                    task.spawn(Config.MakeTracer, Args[2])
-                end
-
-                if Config.Hit_Sounds_Settings.Enabled and Players:GetPlayerFromCharacter(Args[1].Parent) then                            
-                    task.spawn(Config.PlaySound)
-                end
-            else
-                return Old_OnRayHit_Sub2(unpack(Args))
-            end
-
-            return Old_OnRayHit_Sub2(unpack(Args))
-        end))
-    end)()
-
-    local CustomExplosion = string.rep("A", 55) .. "Q3VzdG9tRXhwbG9zaW9u"
-    local Auto = "SWvMILoJOrNpYpHcGjZvFSisRwRZlFPxuIwWTivPnnSfEWeKlNabBSCQXV0bw=="
-
-    LPH_JIT_MAX(function()
-        local Old_aa; Old_aa = hookfunction(aa, newcclosure(function(String)
-            if String == Auto then
-                String = CustomExplosion
-            else
-                return Old_aa(String)
-            end
-
-            return Old_aa(String)
-        end))
-    end)()
-    
     local OldLightingSettings = {}
 
     OldLightingSettings["Brightness"] = Lighting.Brightness
@@ -2035,8 +976,26 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
     local Tint = Instance.new("ColorCorrectionEffect", Lighting)
     local OldSaturation = Lighting.ColorCorrection.Saturation
     local OldFogColor = Lighting.FogColor
-    local Set_Fog, Set_Fov, Set_FullBright = true, true, true
-    RunService:BindToRenderStep("World_Visuals", Enum.RenderPriority.Camera.Value+1, LPH_NO_VIRTUALIZE(function()
+    local Set_Fog, Set_Fov, Set_FullBright = false, false, false
+    RunService:BindToRenderStep("World_Visuals", Enum.RenderPriority.Camera.Value, LPH_NO_VIRTUALIZE(function()
+        -- Maintain snowflake count
+        lastSnowflakeUpdate = lastSnowflakeUpdate + (RunService.RenderStepped:Wait() or 0.016)
+        if lastSnowflakeUpdate >= updateInterval then
+            local currentSnowflakes = #snowflakeFolder:GetChildren()
+            if currentSnowflakes < snowflakeCount then
+                CreateSnowflake()
+            end
+            lastSnowflakeUpdate = 0
+        end
+        
+        -- Apply red glow to player
+        if LocalPlayer.Character then
+            local humanoidRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart then
+                ApplyRedGlow(humanoidRootPart)
+            end
+        end
+        
         if Config.WorldVisuals.StretchEnabled then
             Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, Config.WorldVisuals.StretchValue, 0, 0, 0, 1)
         end 
@@ -2095,7 +1054,7 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
 
     TargetFetcherConnection = RunService.RenderStepped:Connect(GetSelectedTarget)
 
-    FieldOfViewConnection = RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function()
+    RunService:BindToRenderStep("FieldOfViewConnection", 0, LPH_NO_VIRTUALIZE(function()
         local ClientPosition = Device_Mobile and Center_Of_Screen or UserInputService:GetMouseLocation()
 
         FieldOfView.Position = ClientPosition
@@ -2131,7 +1090,7 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
         end
     end))
 
-    --[[if Workspace:FindFirstChild(("Guns"):upper()) then
+    if Workspace:FindFirstChild(("Guns"):upper()) then
         for Index, Value in Workspace:FindFirstChild(("Guns"):upper()):GetChildren() do
             if not Value:IsA("Model") then continue end;
             local Price = Value:FindFirstChild("Price", true).Value;
@@ -2145,88 +1104,659 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
         end
     end
 
-    table.sort(Config.The_Bronx.Guns)]]
+    -- Auto Farms
+        Config.CollectDroppedMoney = LPH_NO_VIRTUALIZE(function()  
+            if not Config.The_Bronx.Farms.CollectDroppedMoney then return end
+            if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+            local OldCFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
 
-    if Workspace.Folders:FindFirstChild("PromptPurchases") then
-        Gun_Locations = {}
+            for Index, Value in next, {Workspace.Dollas:GetChildren()} do
+                for _Index, _Value in Value do
+                    if not _Value:IsA("Part") then continue end
 
-        for i, v in ReplicatedStorage.Workspace:GetChildren() do
-            if v.Name == "PromptPurchases" then
-                for Index, Value in v:GetChildren() do
-                    if Value:IsA("Model") and not Workspace.Folders:FindFirstChild("PromptPurchases"):FindFirstChild(Value.Name) then
-                        Value.Parent = Workspace.Folders:FindFirstChild("PromptPurchases")
-                    end
+                    Config:Teleport(_Value.CFrame + Vector3.new(0, 3.5, 0))
+
+                    task.wait(0.4)
+
+                    fireproximityprompt(_Value.ProximityPrompt)
+
+                    task.wait(_Value.ProximityPrompt.HoldDuration)
                 end
             end
-        end
 
-        for i,v in Workspace.Folders:GetChildren() do
-            if v.Name == "PromptPurchases" then
-                for Index, Value in v:GetChildren() do
-                    if not Value:FindFirstChild("Price") then continue end
-                    if not Value:FindFirstChild("proxprompt") then continue end
-                    if not Value:FindFirstChild("proxprompt"):FindFirstChildOfClass("ProximityPrompt") then continue end
+            Config:Teleport(OldCFrame)
 
-                    local GunWithPrice = string.format("%s - $%s", tostring(Value), tostring(Value.Price.Value))
-                    if not table.find(Config.South_Bronx.Guns, GunWithPrice) then
-                        table.insert(Config.South_Bronx.Guns, GunWithPrice)
+            task.wait(0.4)
 
-                        Gun_Locations[Value.Name] = Value.proxprompt.CFrame
-                    end
-                end
-            end
-        end
-
-        table.sort(Config.South_Bronx.Guns)
-    end
-
-    local Gun_Module = require(LocalPlayer.PlayerScripts["Client.Initializer"].Modules.Tools.GunScript_Local)
-
-    do -- Render Stepped Functions
-        local Movement_Controller = require(LocalPlayer.PlayerScripts["Client.Initializer"].Modules.MovementController)
-
-        RunService:BindToRenderStep("Render Stepped Functions", 0, LPH_NO_VIRTUALIZE(function()
-            if Config.South_Bronx.InfiniteStamina then
-                Movement_Controller.Stamina = 100
-            end
-
-            local Character = LocalPlayer.Character
-            local Head = nil;
-
-            if Character and Character:FindFirstChild("Head") then
-                Head = Character.Head
-            end
-
-            --if Config.South_Bronx.HideName then
-               if Head and Head:FindFirstChild("RankTag") then
-                    if (not Character:FindFirstChild("Mask")) or (Character:FindFirstChild("Mask") and Character:FindFirstChild("Mask").Handle.Transparency == 1) then
-                        Head:FindFirstChild("RankTag").MainFrame.NameLabel.Text = Config.South_Bronx.HideName and Config.South_Bronx.HideName_NameValue or LocalPlayer.Name
-                    else
-                        Head:FindFirstChild("RankTag").MainFrame.NameLabel.Text = Config.South_Bronx.HideName and Config.South_Bronx.HideName_NameValue or LocalPlayer.UserId
-                    end
-                end
-            --end
-        end))
-
-        local string_match ; string_match = hookfunction(getrenv().string.match, function(...)
-            if not checkcaller() and getcallingscript().Parent == nil then
-                local Text = select(1, ...)
-
-                if Text == LocalPlayer.Name or Text == Config.South_Bronx.HideName_NameValue or Text == tostring(LocalPlayer.UserId) then
-                    return true
-                else
-                    return string_match(...)
-                end
-            else
-                return string_match(...)
-            end
-
-            return string_match(...)
+            return true
         end)
 
-        ProximityPromptService.PromptButtonHoldBegan:Connect(LPH_NO_VIRTUALIZE(function(Prompt, Player)
-            if Player == LocalPlayer and Prompt and Prompt.HoldDuration ~= 0 and Config.South_Bronx.InstantInteract then
-                fireproximityprompt(Prompt)
+        Config.CollectLootBags = LPH_NO_VIRTUALIZE(function()  
+            if not Config.The_Bronx.Farms.CollectDroppedLoot then return end
+            if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+            local OldCFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
+
+            for Index, Value in next, {Workspace.Storage:GetChildren()} do
+                for _Index, _Value in Value do
+                    if not _Value:IsA("MeshPart") then continue end
+                    if _Value:FindFirstChild("PlayerName").Value == LocalPlayer.Name then continue end
+
+                    Config:Teleport(_Value.CFrame + Vector3.new(0, 3.5, 0))
+
+                    task.wait(0.4)
+
+                    fireproximityprompt(_Value.stealprompt)
+
+                    task.wait(_Value.stealprompt.HoldDuration)
+                end
+            end
+
+            return true
+        end)
+
+        Workspace.Storage.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function()
+            task.spawn(Config.CollectLootBags)
+        end))
+
+        Workspace.Dollas.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function()
+            task.spawn(Config.CollectDroppedMoney)
+        end))
+
+        local Get_Vehicle = LPH_NO_VIRTUALIZE(function()
+            for Index, Value in Workspace.CivCars:GetChildren() do
+                if not Value:FindFirstChild("DriveSeat") then continue end
+                if not Value.DriveSeat.Occupant then
+                    return Value
+                end
+            end
+        end)
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while task.wait() do
+                if not Config.The_Bronx.PlayerUtilities.BugPlayer then continue end
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or not Players:FindFirstChild(Library.Selected_Player.Name) or not Players:FindFirstChild(Library.Selected_Player.Name).Character or not Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("HumanoidRootPart") then continue end                    
+
+                local Car_To_Use = Get_Vehicle()
+
+                if not Car_To_Use then continue end
+                if not Car_To_Use:FindFirstChild("DriveSeat") then continue end
+                if Car_To_Use:FindFirstChild("DriveSeat").Occupant then continue end
+
+                if not Car_To_Use:GetAttribute("Usable") or Car_To_Use:GetAttribute("Usable") == false then
+                    Car_To_Use.DriveSeat:Sit(LocalPlayer.Character.Humanoid)
+
+                    Car_To_Use:SetAttribute("Usable", true)
+                    task.wait(1)
+
+                    LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+
+                    LocalPlayer.Character.Humanoid.Jump = true
+                    LocalPlayer.Character.Humanoid.Sit = false
+                end
+
+                Car_To_Use.DriveSeat:GetPropertyChangedSignal("Occupant"):Connect(function()
+                    task.wait()
+                    
+                    if Car_To_Use.DriveSeat.Occupant and Car_To_Use.DriveSeat.Occupant ~= LocalPlayer.Character.Humanoid then
+                        Car_To_Use:SetAttribute("Usable", false)
+                    end
+                end)
+                
+                task.wait()
+
+                if not Car_To_Use.PrimaryPart then
+                    Car_To_Use.PrimaryPart = Car_To_Use.Body:FindFirstChild("#Weight", true)
+                end
+
+                if not Car_To_Use.PrimaryPart then
+                    Car_To_Use.PrimaryPart = Car_To_Use.Body:FindFirstChildWhichIsA("Part", true)
+                end
+
+                Car_To_Use:SetPrimaryPartCFrame(Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("HumanoidRootPart").CFrame)
+            end
+        end))
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while task.wait(1) do
+                if not Config.The_Bronx.PlayerUtilities.AutoKill then continue end
+                if not LocalPlayer.Character then continue end
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or not Players:FindFirstChild(Library.Selected_Player.Name) or not Players:FindFirstChild(Library.Selected_Player.Name).Character or not Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("HumanoidRootPart") then continue end                    
+                if not LocalPlayer.Character:FindFirstChildOfClass("Tool") then continue end
+                if not LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("GunScript_Local") then continue end
+
+                if Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("Humanoid").Health == 0 then continue end
+                if Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChildOfClass("ForceField") then continue end
+
+                Config:GunRemote(Library.Selected_Player.Name, 'Head', math.huge)
+            end
+        end))
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while task.wait(2) do
+                if not Config.The_Bronx.PlayerUtilities.AutoRagdoll then continue end
+                if not LocalPlayer.Character then continue end
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or not Players:FindFirstChild(Library.Selected_Player.Name) or not Players:FindFirstChild(Library.Selected_Player.Name).Character or not Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("HumanoidRootPart") then continue end                    
+                if not LocalPlayer.Character:FindFirstChildOfClass("Tool") then continue end
+                if not LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("GunScript_Local") then continue end
+
+                if Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("Humanoid").Health == 0 then continue end
+                if Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("Humanoid"):GetState() == Enum.HumanoidStateType.Physics then continue end
+
+                Config:GunRemote(Library.Selected_Player.Name, 'RightUpperLeg', 0.01)
+            end
+        end))
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while task.wait() do
+                if not Config.The_Bronx.PlayerUtilities.BringingPlayer then continue end
+                if tostring(Library.Selected_Player.Name) == tostring(LocalPlayer) then continue end
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or not Players:FindFirstChild(Library.Selected_Player.Name) or not Players:FindFirstChild(Library.Selected_Player.Name).Character or not Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("HumanoidRootPart") then continue end
+                Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("HumanoidRootPart").CFrame = LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame + Vector3.new(2, 0, 0)
+            end
+        end))
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while task.wait(1) do
+                if not Config.The_Bronx.KillAura then continue end
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChildOfClass("Tool") or not LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then continue end
+                for Index, Value in Players:GetPlayers() do
+                    if table.find(Library.Friendly_Players, Value.Name) then continue end
+                    if Value == LocalPlayer then continue end
+                    if not Value.Character or not Value.Character:FindFirstChildOfClass("Humanoid") or not Value.Character:FindFirstChild("HumanoidRootPart") then continue end
+                    if Value.Character:FindFirstChildOfClass("Humanoid").Health == 0 then continue end
+                    if Value.Character:FindFirstChildOfClass("ForceField") then continue end
+
+                    if not DistanceCheck(Value, Config.The_Bronx.KillAuraRange) then continue end
+
+                    Config:GunRemote(Value.Name, 'Head', math.huge)
+                end
+            end
+        end))
+
+        local GetPlaceToPlaceWood = LPH_NO_VIRTUALIZE(function()
+            for Index, Value in Workspace.ConstructionStuff:GetChildren() do
+                if Value.Name:find("Wall") and Value:IsA("Part") and Value:FindFirstChild("Prompt") then
+                    if Value:FindFirstChild("Prompt").Enabled then
+                        return Value
+                    end
+                end
+            end
+        end)
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while true do task.wait()
+                if not Config.The_Bronx.Farms.FarmConstructionJob then continue end
+
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then continue end
+                if not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character:FindFirstChild("Humanoid").Health == 0 then continue end
+
+                if not LocalPlayer:GetAttribute("WorkingJob") then
+                    Config:Teleport(CFrame.new(-1729, 371, -1171))
+
+                    task.wait(0.4)
+
+                    fireproximityprompt(Workspace.ConstructionStuff["Start Job"].Prompt)
+
+                    repeat task.wait() until LocalPlayer:GetAttribute("WorkingJob")
+                end
+
+                if not LocalPlayer.Backpack:FindFirstChild("PlyWood") and not LocalPlayer.Character:FindFirstChild("PlyWood") then
+                    Config:Teleport(CFrame.new(-1728, 371, -1178))
+                    
+                    repeat task.wait() fireproximityprompt(Workspace.ConstructionStuff["Grab Wood"].Prompt) until LocalPlayer.Backpack:FindFirstChild("PlyWood") or LocalPlayer.Character:FindFirstChild("PlyWood")
+                end
+
+                repeat task.wait() until LocalPlayer.Backpack:FindFirstChild("PlyWood") or LocalPlayer.Character:FindFirstChild("PlyWood")
+
+                if LocalPlayer.Backpack:FindFirstChild("PlyWood") then
+                    LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("PlyWood"))
+                end
+
+                local PlaceToPlaceWood = GetPlaceToPlaceWood()
+
+                if not PlaceToPlaceWood then continue end
+
+                Config:Teleport(PlaceToPlaceWood.CFrame)
+
+                repeat task.wait()
+                    fireproximityprompt(PlaceToPlaceWood.Prompt)
+                until not LocalPlayer.Character:FindFirstChild("PlyWood") or not PlaceToPlaceWood.Prompt.Enabled
+            end
+        end))
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while true do task.wait()
+                if not Config.The_Bronx.Farms.FarmBank then continue end
+
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then continue end
+                if not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character:FindFirstChild("Humanoid").Health == 0 then continue end
+
+                local Robbable = Workspace.vault.door.robPrompt.ProximityPrompt.Enabled
+
+                if not Robbable then
+                    if Config.The_Bronx.Farms.AFKCheck then
+                        Config:Teleport(CFrame.new(-437, 33, 6653))
+                    end
+
+                    task.wait(0.4)
+
+                    continue
+                end
+
+                if not LocalPlayer.Character:FindFirstChild("DuffelBag") then
+                    Config:Teleport(CFrame.new(-414, 334, -549))
+
+                    task.wait(0.4)
+
+                    fireproximityprompt(Workspace.dufflebagequip:FindFirstChildWhichIsA("ProximityPrompt"))
+                end
+
+                if not LocalPlayer.Backpack:FindFirstChild("C4") and not LocalPlayer.Character:FindFirstChild("C4") then
+                    Config:Teleport(CFrame.new(-412, 334, -562))
+
+                    task.wait(0.4)
+
+                    fireproximityprompt(Workspace.GUNS.C4.Handle.BuyPrompt)
+                end
+
+                repeat task.wait() until LocalPlayer.Backpack:FindFirstChild("C4") or LocalPlayer.Character:FindFirstChild("C4")
+
+                LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("C4"))
+
+                Config:Teleport(CFrame.new(-216, 374, -1216))
+
+                task.wait(0.4)
+
+                fireproximityprompt(Workspace.vault.door.robPrompt.ProximityPrompt)
+
+                task.wait(2)
+
+                local Number = LocalPlayer.Character.DuffelBag.display.SurfaceGui.Frame.TextLabel.Text
+
+                Number = Number:gsub("0/", "")
+
+                for Index = 1, tonumber(Number) do
+                    local Cash = Workspace.BankItems.Cash:FindFirstChild("Cash")
+
+                    if not Cash then
+                        for i,v in Workspace:GetChildren() do
+                            if v.Name == "Cash" and v:IsA("Model") and v:FindFirstChild("Model") then
+                                Cash = v
+                            end
+                        end
+                    end
+
+                    Config:Teleport(Cash.Model.Cash.CFrame)
+                    task.wait(0.4)
+                    fireproximityprompt(Cash.Model:FindFirstChildWhichIsA("ProximityPrompt", true))
+                    task.wait(.25)
+                end
+
+                Config:Teleport(Workspace.sellgold.CFrame)
+
+                task.wait(0.4)
+
+                fireclickdetector(Workspace.sellgold.ClickDetector)
+            end
+        end))
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while true do task.wait()
+                if not Config.The_Bronx.Farms.FarmHouses then continue end
+
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then continue end
+                if not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character:FindFirstChild("Humanoid").Health == 0 then continue end
+
+                local HardDoorEnabled = Workspace.HouseRobb.HardDoor.Door:FindFirstChildWhichIsA("ProximityPrompt", true).Enabled
+
+                if not HardDoorEnabled and Config.The_Bronx.Farms.AFKCheck then
+                    Config:Teleport(CFrame.new(-437, 33, 6653))
+                    continue
+                end
+
+                if HardDoorEnabled then
+                    Config:Teleport(Workspace.HouseRobb.HardDoor.Door:FindFirstChildWhichIsA("ProximityPrompt", true).Parent.CFrame)
+
+                    repeat task.wait()
+                    
+                    fireproximityprompt(Workspace.HouseRobb.HardDoor.Door:FindFirstChildWhichIsA("ProximityPrompt", true))
+
+                    until Workspace.HouseRobb.HardDoor:FindFirstChild("TakeMoney") and Workspace.HouseRobb.HardDoor:FindFirstChild("TakeMoney"):FindFirstChild("MoneyGrab"):FindFirstChildWhichIsA("ProximityPrompt", true).Enabled
+
+
+                    for Index, Value in Workspace.HouseRobb.HardDoor.TakeMoney:GetChildren() do                            
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = Value.CFrame
+                        fireproximityprompt(Value.ProximityPrompt)
+                        task.wait(0.025)
+                    end
+
+                    continue
+                end
+            end
+        end))
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while true do task.wait()
+                if not Config.The_Bronx.Farms.FarmStudio then continue end
+
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then continue end
+                if not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character:FindFirstChild("Humanoid").Health == 0 then continue end
+
+                local Prompt1, Prompt2, Prompt3 = Workspace.StudioPay.Money.StudioPay1:FindFirstChild("Prompt", true), Workspace.StudioPay.Money.StudioPay2:FindFirstChild("Prompt", true), Workspace.StudioPay.Money.StudioPay3:FindFirstChild("Prompt", true)
+
+                if Prompt1.Enabled then
+                    Config:Teleport(Prompt1.Parent.CFrame)
+                    task.wait(0.4)
+                    fireproximityprompt(Prompt1)
+                    task.wait(0.1)
+                end
+
+                if Prompt2.Enabled then
+                    Config:Teleport(Prompt2.Parent.CFrame)
+                    task.wait(0.4)
+                    fireproximityprompt(Prompt2)
+                    task.wait(0.1)
+                end
+
+                if Prompt3.Enabled then
+                    Config:Teleport(Prompt3.Parent.CFrame)
+                    task.wait(0.4)
+                    fireproximityprompt(Prompt3)
+                    task.wait(0.1)
+                end
+                
+                if Config.The_Bronx.Farms.AFKCheck then
+                    task.wait(0.4)
+                    Config:Teleport(CFrame.new(-437, 33, 6653))
+                    task.wait(0.4)
+                    continue
+                end
+            end
+        end))
+
+        local PressKey = function(KeyCode, Duration)
+            task.spawn(LPH_NO_VIRTUALIZE(function()
+                Services.VirtualInputManager:SendKeyEvent(false, KeyCode, false, game)
+                Services.VirtualInputManager:SendKeyEvent(true, KeyCode, false, game)
+                task.wait(Duration)
+                Services.VirtualInputManager:SendKeyEvent(false, KeyCode, false, game)
+            end))
+        end
+
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while true do task.wait()
+                if not Config.The_Bronx.Farms.FarmTrash then continue end
+
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then continue end
+                if not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character:FindFirstChild("Humanoid").Health == 0 then continue end
+
+                for Index, Value in Workspace:GetChildren() do
+                    if Value.Name == "DumpsterPromt" and Config.The_Bronx.Farms.FarmTrash then
+                        if Value:FindFirstChild("ProximityPrompt") and Value:FindFirstChild("ProximityPrompt").Enabled then
+                            Value:FindFirstChild("ProximityPrompt").HoldDuration = 0
+                            Config:Teleport(CFrame.new(Value.Position.X, Value.Position.Y, Value.Position.Z))
+                            task.wait(0.25)
+
+                            xpcall(function()
+                                replicatesignal(Value.ProximityPrompt.TriggeredActionReplicated, LocalPlayer)
+                            end, function()
+                                fireproximityprompt(Value:FindFirstChild("ProximityPrompt"))
+                            end)
+
+                            task.wait(0.1)
+                            Value:FindFirstChild("ProximityPrompt").HoldDuration = 1
+                        end
+                    end 
+                end
+
+                if Config.The_Bronx.Farms.AutoSellTrash then
+                    for Index, Value in LocalPlayer.Backpack:GetChildren() do
+                        if Value:IsA("Tool") then
+                            ReplicatedStorage:WaitForChild("PawnRemote"):FireServer(Value.Name)
+                            task.wait()
+                        end
+                    end
+                    
+                    task.wait(1)
+                end
+            end
+        end))
+
+        Config.GetGoodCleaner = LPH_NO_VIRTUALIZE(function()
+            local CounterInstance;
+
+            for Index, Value in Workspace["1# Map"]:GetChildren() do
+                if Value:FindFirstChild("CounterM") then
+                    CounterInstance = Value
+                end
+            end
+
+            for Index, Value in next, {{}, CounterInstance:GetChildren()} do
+                for _Index, _Value in Value do
+                    if _Value:FindFirstChild("CashPrompt", true) and _Value:FindFirstChild("CashPrompt", true).Enabled and _Value:FindFirstChild("CashPrompt", true).ObjectText == "Count Bread" and _Value:FindFirstChild("GrabPrompt", true) and not _Value:FindFirstChild("GrabPrompt", true).Enabled then
+                        return _Value
+                    end
+                end
+            end
+        end)
+    --
+
+    -- Connections
+        local DeathFrame;
+
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character:FindFirstChild("Humanoid").Died:Connect(LPH_NO_VIRTUALIZE(function()
+                DeathFrame = LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame
+            end))
+
+            LocalPlayer.Character.DescendantAdded:Connect(function(Descendant)
+                if Descendant:IsA("BodyVelocity") or Descendant:IsA("LinearVelocity") or Descendant:IsA("VectorForce") and Config.The_Bronx.PlayerModifications.NoKnockback then
+                    task.wait(); Descendant:Destroy()
+                end
+            end)
+        end
+
+        LocalPlayer.CharacterAdded:Connect(LPH_NO_VIRTUALIZE(function(Character)
+            Character:WaitForChild("Humanoid"); Character:WaitForChild("HumanoidRootPart");
+
+            Character.DescendantAdded:Connect(function(Descendant)
+                if Descendant:IsA("BodyVelocity") or Descendant:IsA("LinearVelocity") or Descendant:IsA("VectorForce") and Config.The_Bronx.PlayerModifications.NoKnockback then
+                    task.wait(); Descendant:Destroy()
+                end
+            end)
+
+            Character:WaitForChild("Humanoid").Died:Connect(function()
+                DeathFrame = Character:WaitForChild("HumanoidRootPart").CFrame
+            end)
+
+            if Config.The_Bronx.PlayerModifications.RespawnWhereYouDied and typeof(DeathFrame) == "CFrame" then
+                Character:WaitForChild("HumanoidRootPart").CFrame = DeathFrame
+            end
+        end))
+        
+        task.spawn(LPH_NO_VIRTUALIZE(function()
+            while task.wait(0.1) do
+                if Config.The_Bronx.PlayerModifications.FasterRespawn then
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") and LocalPlayer.Character:FindFirstChild("Humanoid"):GetState() == Enum.HumanoidStateType.Dead then
+                        ReplicatedStorage:WaitForChild("LoadCharacter"):FireServer()
+                    end
+                end
+            end
+        end))
+
+        local Set_Speed = false; local Set_Spectate = false; RunService:BindToRenderStep("WalkSpeed", 400, LPH_NO_VIRTUALIZE(function(Delta)
+            if Config.MiscSettings.ModifySpeed.Enabled then
+                Set_Speed = false
+                
+                LocalPlayer.Character:FindFirstChild("Humanoid").WalkSpeed = Config.MiscSettings.ModifySpeed.Value
+            else
+                if not Set_Speed then
+                    Set_Speed = true;
+                    LocalPlayer.Character:FindFirstChild("Humanoid").WalkSpeed = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 16 or 7
+                end
+            end
+
+            if Config.The_Bronx.PlayerUtilities.SpectatePlayer then
+                Set_Spectate = false
+                local Subject = Players:FindFirstChild(Library.Selected_Player.Name) and Players:FindFirstChild(Library.Selected_Player.Name).Character and Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("Humanoid")
+
+                if not Players:FindFirstChild(Library.Selected_Player.Name) or not Players:FindFirstChild(Library.Selected_Player.Name).Character or not Players:FindFirstChild(Library.Selected_Player.Name).Character:FindFirstChild("Humanoid") then
+                    Subject = LocalPlayer.Character.Humanoid
+                end
+
+                Camera.CameraSubject = Subject
+            else
+                if not Set_Spectate then
+                    Set_Spectate = true
+
+                    Camera.CameraSubject = LocalPlayer.Character.Humanoid
+                end
+            end
+        end))
+
+        RunService:BindToRenderStep("PlayerFunctions", 400, LPH_NO_VIRTUALIZE(function()
+            if LocalPlayer.PlayerGui:FindFirstChild("Run") and LocalPlayer.PlayerGui.Run:FindFirstChild("StaminaBarScript", true) then
+                LocalPlayer.PlayerGui.Run:FindFirstChild("StaminaBarScript", true).Disabled = Config.The_Bronx.PlayerModifications.InfiniteStamina
+            end
+
+            if LocalPlayer.PlayerGui:FindFirstChild("Hunger") and LocalPlayer.PlayerGui.Hunger:FindFirstChild("HungerBarScript", true) then
+                LocalPlayer.PlayerGui.Hunger:FindFirstChild("HungerBarScript", true).Disabled = Config.The_Bronx.PlayerModifications.InfiniteHunger
+            end
+
+            if LocalPlayer.PlayerGui:FindFirstChild("SleepGui") and LocalPlayer.PlayerGui.SleepGui:FindFirstChild("sleepScript", true) then
+                LocalPlayer.PlayerGui.SleepGui:FindFirstChild("sleepScript", true).Disabled = Config.The_Bronx.PlayerModifications.InfiniteSleep
+            end
+
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("CameraBobbing") then
+                LocalPlayer.Character:FindFirstChild("CameraBobbing").Disabled = Config.The_Bronx.PlayerModifications.DisableCameraBobbing
+            end
+
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("FallDamageRagdoll") then
+                LocalPlayer.Character:FindFirstChild("FallDamageRagdoll").Disabled = Config.The_Bronx.PlayerModifications.NoFallDamage
+            end
+
+            if LocalPlayer.PlayerGui:FindFirstChild("BloodGui") then
+                LocalPlayer.PlayerGui:FindFirstChild("BloodGui").Enabled = not Config.The_Bronx.PlayerModifications["DisableBloodEffects"]
+            end
+
+            if LocalPlayer.PlayerGui:FindFirstChild("JumpDebounce") and LocalPlayer.PlayerGui:FindFirstChild("JumpDebounce"):FindFirstChild("LocalScript") then
+                LocalPlayer.PlayerGui:FindFirstChild("JumpDebounce").LocalScript.Disabled = Config.The_Bronx.PlayerModifications.NoJumpCooldown
+            end
+
+            if LocalPlayer.PlayerGui:FindFirstChild("CameraTexts") and LocalPlayer.PlayerGui:FindFirstChild("CameraTexts"):FindFirstChild("LocalScript") then
+                LocalPlayer.PlayerGui:FindFirstChild("CameraTexts").Enabled = not Config.The_Bronx.PlayerModifications.DisableCameras
+                LocalPlayer.PlayerGui:FindFirstChild("CameraTexts").LocalScript.Disabled = Config.The_Bronx.PlayerModifications.DisableCameras
+            end
+
+            if LocalPlayer.PlayerGui:FindFirstChild("JumpDebounce") and LocalPlayer.PlayerGui:FindFirstChild("JumpDebounce"):FindFirstChild("LocalScript") then
+                LocalPlayer.PlayerGui:FindFirstChild("JumpDebounce").LocalScript.Disabled = Config.The_Bronx.PlayerModifications.NoJumpCooldown
+            end
+
+            if LocalPlayer.PlayerGui:FindFirstChild("RentGui") and LocalPlayer.PlayerGui:FindFirstChild("RentGui"):FindFirstChild("LocalScript") then
+                LocalPlayer.PlayerGui:FindFirstChild("RentGui").LocalScript.Disabled = Config.The_Bronx.PlayerModifications.NoRentPay
+            end
+
+            if Config.The_Bronx.PlayerModifications.AutoPickupBags and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                for Index, Value in next, Workspace.Storage:GetChildren() do
+                    if not Value:IsA("MeshPart") then continue end
+                    if Value:FindFirstChild("PlayerName") and Value:FindFirstChild("PlayerName").Value == LocalPlayer.Name then continue end
+        
+                    if (Value.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude < 5 then
+                        fireproximityprompt(Value.stealprompt)
+                    end
+                end
+            end
+
+            if Config.The_Bronx.PlayerModifications.AutoPickupCash and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                for Index, Value in next, Workspace.Dollas:GetChildren() do
+                    if not Value:IsA("Part") then continue end
+        
+                    if (Value.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude < 5 then
+                        fireproximityprompt(Value.ProximityPrompt)
+                    end
+                end
+            end
+        end))
+
+        RunService.PreRender:Connect(LPH_NO_VIRTUALIZE(function()
+            if not Config.The_Bronx.PlayerModifications.InstantRevive then return end
+            if not LocalPlayer.Character then return end
+            if not LocalPlayer.Character:FindFirstChild("Humanoid") then return end
+
+            if LocalPlayer.Character.Humanoid:GetState() == Enum.HumanoidStateType.Physics then
+                FireServer(ReplicatedStorage.FSpamRemote)
+                LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+
+            StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+        end))
+
+        ProximityPromptService.PromptButtonHoldBegan:Connect(LPH_NO_VIRTUALIZE(function(Prompt, Self)
+            if Prompt and Self == LocalPlayer and fireproximityprompt then
+                if Config.The_Bronx.PlayerModifications.InstantInteract then
+                    fireproximityprompt(Prompt, true)
+                end
+
+                if Config.The_Bronx.PlayerModifications.BypassLockedCars then
+                    if Self == LocalPlayer then
+                        while true do
+                            if Prompt.Parent:FindFirstChild("DriveSeat") then
+                                if Prompt:IsA("VehicleSeat") then
+                                    Prompt:Sit(LocalPlayer.Character.Humanoid)
+                                else
+                                    Prompt = Prompt.Parent
+                                end
+
+                                break
+                            else
+                                Prompt = Prompt.Parent
+                            end
+                
+                            if not Prompt.Parent then
+                                break
+                            end
+                        end
+                    end
+                end
+            end 
+        end))
+
+        local Set_JumpPower = false; task.spawn(LPH_NO_VIRTUALIZE(function()
+            while task.wait(.1) do
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    if Config.MiscSettings.ModifyJump.Enabled then
+                        Set_JumpPower = false
+                        LocalPlayer.Character:FindFirstChild("Humanoid").JumpHeight = Config.MiscSettings.ModifyJump.Value
+                    else
+                        if not Set_JumpPower then
+                            Set_JumpPower = true;
+                            LocalPlayer.Character:FindFirstChild("Humanoid").JumpHeight = 7
+                        end
+                    end
+                end
+            end
+        end))
+
+        local Teleport_Debounce = false
+        Config.Connections["InputBegan_ClickTeleport"] = UserInputService.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(Input, Game_Event)
+            if Game_Event then return end
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 and Config.MiscSettings.ClickTeleport_Enabled and UserInputService:IsKeyDown(Config.MiscSettings.ClickTeleport_Key) then
+                local MouseLocation = UserInputService:GetMouseLocation()
+                local Ray = Camera:ViewportPointToRay(MouseLocation.X, MouseLocation.Y)
+                local RaycastParams = RaycastParams.new()
+                RaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+                RaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Workspace:FindFirstChild("Cameras"), Workspace:FindFirstChild("CameraLocations")}
+                local Cast = Workspace:Raycast(Ray.Origin, Ray.Direction * 1000, RaycastParams)
+                
+                if Cast and not Teleport_Debounce then
+                    Teleport_Debounce = true
+
+                    Config:Teleport(CFrame.new(Cast.Position + Vector3.new(0,3,0)))
+
+                    task.delay(.1, function()
+                        Teleport_Debounce = false
+                    end)
+                end
             end
         end))
 
@@ -2270,26 +1800,6 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
 
         task.spawn(LPH_NO_VIRTUALIZE(function()
             while true do
-                local Delta = RunService.Heartbeat:Wait()
-
-                if not Config.South_Bronx.Speed then continue end
-
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    local Humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
-
-                    if Humanoid.MoveDirection.Magnitude > 0 then
-                        local SpeedFactor = (Humanoid.WalkSpeed >= 10) and 1 or 0.54
-                        LocalPlayer.Character:TranslateBy(
-                            Humanoid.MoveDirection * Config.South_Bronx.SpeedValue 
-                            * Delta * 10 * SpeedFactor
-                        )
-                    end
-                end
-            end
-        end))
-
-        task.spawn(LPH_NO_VIRTUALIZE(function()
-            while true do
                 task.wait(0)
                 if Config.VehicleModifications.InstantStop and UserInputService:IsKeyDown(Config.VehicleModifications.InstantStopBind) then
                     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
@@ -2307,1646 +1817,282 @@ Config.Connections["PlayerAdded_FriendCheck"] = Players.PlayerAdded:Connect(Chec
                 end
             end
         end))
-    end
+    --
 
-    do -- Auto Farms
-        local GetCuttingBoard, GetBowl, GetPot, GetHouse = LPH_NO_VIRTUALIZE(function()
-            for Index, Value in Workspace.Map.Locations["The Laboratory"]["Cutting Boards"]:GetChildren() do
-                local Prompt = Value:FindFirstChildWhichIsA("ProximityPrompt", true)
+    -- Weapon Modifications
+        do
+            local OldWeaponValues = {}
 
-                if Prompt and Prompt.Enabled then
-                    return Value
-                end
-            end
-        end), LPH_NO_VIRTUALIZE(function()
-            for Index, Value in Workspace.Map.Locations["The Laboratory"].Bowls:GetChildren() do
-                local Prompt = Value:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-                if Prompt and Prompt.Enabled then
-                    return Value
-                end
-            end
-        end), LPH_NO_VIRTUALIZE(function()
-            for Index, Value in Workspace.Map.Locations["The Laboratory"].Extra:GetChildren() do
-                if Value.Name == "Table" then
-                    Value.CanCollide = false
-                end
-            end
-
-            for Index, Value in Workspace.Map.Locations["The Laboratory"].Pots:GetChildren() do
-                local Prompt = Value:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-                if Prompt and Prompt.Enabled then
-                    return Value
-                end
-            end
-        end), LPH_NO_VIRTUALIZE(function()
-            for Index, Value in Workspace.Map.APTS:GetChildren() do
-                if Value:FindFirstChild("Board") then
-                    local Name = Value:FindFirstChild("Board").name.SurfaceGui.TextLabel.Text
-
-                    if Name == LocalPlayer.Name then
-                        return Workspace.Map.Houses:FindFirstChild(Value.Name) or Workspace.Map.Locations.Apartments:FindFirstChild(Value.Name)
-                    end
-                end
-            end
-
-            return nil
-        end)
-
-        local ATMPositions = {
-            ATM1 = CFrame.new(-30, 4, -300);
-            ATM2 = CFrame.new(539, 4, -353);
-            ATM3 = CFrame.new(497, 4, 403);
-            ATM4 = CFrame.new(236, 4, -158);
-            ATM5 = CFrame.new(525, -8, -92);
-            ATM6 = CFrame.new(-450, 4, 370);
-            ATM7 = CFrame.new(-266, 4, -209);
-            ATM8 = CFrame.new(-11, 4, 231);
-            ATM9 = CFrame.new(717, 4, 410);
-            ATM10 = CFrame.new(-532, 3, -21);
-            ATM11 = CFrame.new(-646, 4, 155);
-            ATM12 = CFrame.new(698, 3, -241);
-            ATM13 = CFrame.new(-315, 4, 142);
-            ATM14 = CFrame.new(-378, 4, -365);
-            ATM15 = CFrame.new(360, 4, -364);
-            ATM16 = CFrame.new(870, 3, -346);
-            ATM17 = CFrame.new(904, 3, -99);
-            ATM18 = CFrame.new(1095, 3, 178);
-            ATM19 = CFrame.new(1054, 4, 585);
-            ATM20 = CFrame.new(895, 4, 142);
-            ATM21 = CFrame.new(1021, 3, -229);
-        };
-
-        local PressKey = function(KeyCode, Duration)
-            task.spawn(LPH_NO_VIRTUALIZE(function()
-                Services.VirtualInputManager:SendKeyEvent(false, KeyCode, false, game)
-                Services.VirtualInputManager:SendKeyEvent(true, KeyCode, false, game)
-                task.wait(Duration)
-                Services.VirtualInputManager:SendKeyEvent(false, KeyCode, false, game)
-            end))
-        end
-
-        local boxfarm_thread
-
-        Start_BoxFarm = function()
-            boxfarm_thread = task.spawn(LPH_NO_VIRTUALIZE(function()
-                while task.wait() do
-                    if not LocalPlayer.Character then continue end
-                    if not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then continue end
-                    if not Config.South_Bronx.FarmingUtilities.BoxFarm then continue end
-
-                    if (LocalPlayer.Character.HumanoidRootPart.Position - Vector3.new(-549, 3, -82)).Magnitude >= 150 then
-                        Config:Teleport(CFrame.new(-549, 3, -82), true)
-                    end
-
-                    if not LocalPlayer.Backpack:FindFirstChild("Crate") and not LocalPlayer.Character:FindFirstChild("Crate") then
-                        local DistanceFromBox = GetDistance(LocalPlayer.Character.HumanoidRootPart.Position, Vector3.new(-549, 3, -82))
-
-                        local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(GetTweenSpeed(DistanceFromBox), Enum.EasingStyle.Linear), {CFrame = CFrame.new(-549.1292724609375, 3.5371456146240234, -82.9239501953125)})
-
-                        --PressKeyTween(Enum.KeyCode.W, Tween) ; PressKeyTween(Enum.KeyCode.LeftShift, Tween)
-
-                        Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-
-                        fireproximityprompt(Workspace.PlaceHere.Attachment.ProximityPrompt)
-
-                        task.wait(1)
-
-                        repeat task.wait() until LocalPlayer.Backpack:FindFirstChild("Crate")
-
-                        LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack.Crate)
-
-                        task.wait(1)
-                    end
-
-                    if not LocalPlayer.Character:FindFirstChild("Crate") then
-                        LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Crate"))
-                        task.wait(1)
-                    end
-
-                    if not LocalPlayer.Backpack:FindFirstChild("Crate") and not LocalPlayer.Character:FindFirstChild("Crate") then
-                        continue
-                    end
-
-                    local DistanceFromTruck = GetDistance(LocalPlayer.Character.HumanoidRootPart.Position, Vector3.new(-401.04364013671875, 3.3621325492858887, -72.07713317871094))
-
-                    local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(GetTweenSpeed(DistanceFromTruck), Enum.EasingStyle.Linear), {CFrame = CFrame.new(-401.04364013671875, 3.3621325492858887, -72.07713317871094)})
-
-                   -- PressKeyTween(Enum.KeyCode.W, Tween) ; PressKeyTween(Enum.KeyCode.LeftShift, Tween)
-
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-
-                    fireproximityprompt(Workspace.cratetruck2.Model.ClickBox.Attachment.ProximityPrompt)
-
-                    task.wait(0.9)
-                end
-            end))
-        end
-
-        Stop_BoxFarm = LPH_NO_VIRTUALIZE(function()
-            if not boxfarm_thread then return end
-
-            if coroutine.status(boxfarm_thread) == "suspended" then
-                task.cancel(boxfarm_thread)
-            end
-        end)
-
-        task.spawn(LPH_NO_VIRTUALIZE(function()
-            while task.wait(.01) do
-                if not Config.South_Bronx.FarmingUtilities.CardFarm then continue end
-                if not LocalPlayer.Character then continue end
-                if not LocalPlayer.Character:FindFirstChild("Humanoid") then continue end
-
-                if LocalPlayer.Character:FindFirstChild("Humanoid").Sit then
-                LocalPlayer.Character:FindFirstChild("Humanoid").Sit = false ; LocalPlayer.Character:FindFirstChild("Humanoid").Jump = true
-                end
-            end
-        end))
-
-        task.spawn(LPH_NO_VIRTUALIZE(function()
-            while task.wait(3) do
-                if not Config.South_Bronx.FarmingUtilities.CardFarm then continue end
-                if not LocalPlayer.Character then continue end
-                if not LocalPlayer.Character:FindFirstChild("Humanoid") then continue end
-
-                if LocalPlayer.Character:FindFirstChild("Humanoid").Sit then
-                LocalPlayer.Character:FindFirstChild("Humanoid").Sit = false ; LocalPlayer.Character:FindFirstChild("Humanoid").Jump = true
-                end
-
-                for Index, Value in Workspace.Map.Locations["Community Bank"]:GetDescendants() do
-                    pcall(function()
-                        Value.CanCollide = false
-                    end)
-                end
-            end
-        end))
-
-        task.spawn(LPH_NO_VIRTUALIZE(function()
-            while task.wait(.1) do
-                if not Config.South_Bronx.FarmingUtilities.MarshmallowFarm then continue end
-                if not LocalPlayer.Character then continue end
-                if not LocalPlayer.Character:FindFirstChild("Humanoid") then continue end
-
-                if LocalPlayer.Character:FindFirstChild("Humanoid").Sit then
-                LocalPlayer.Character:FindFirstChild("Humanoid").Sit = false ; LocalPlayer.Character:FindFirstChild("Humanoid").Jump = true
-                end
-            end
-        end))
+            local GetAllTools = LPH_NO_VIRTUALIZE(function(LocalToolsOnly)
+                local Result = {}
     
-        task.spawn(LPH_JIT_MAX(function()
-            while task.wait(.1) do
-                if not Config.South_Bronx.FarmingUtilities.CardFarm then continue end
-                
-                pcall(function()
-                    Workspace.Map.Decor:FindFirstChild("rail thing"):Destroy()
-                end)
-
-                if not Workspace.Map.Decor:FindFirstChild("rail thing") then
-                    break
-                end
-            end
-        end))
-
-        local MarshmallowFarm_Thread
-
-        local MarshMallowStep = "Water";
-
-        local GetNumberOfItemsInBackpack = LPH_NO_VIRTUALIZE(function(Name)
-            local Amount = 0
-
-            for Index, Value in LocalPlayer.Backpack:GetChildren() do
-                if Value.Name == Name then
-                    Amount+=1
-                end
-            end
-
-            return Amount
-        end)
-
-        Start_MarshmallowFarm = function()
-            MarshmallowFarm_Thread = task.spawn(LPH_JIT_MAX(function()
-                while wait(1) do
-                    if not Config.South_Bronx.FarmingUtilities.MarshmallowFarm then continue end
-                    
-                    local Marshmellow_Increment = Config.South_Bronx.FarmingUtilities.MarshmallowIncrement
-
-                    local Items = {"Gelatin", "Sugar Block Bag", "Water"}
-
-                    Config.Teleport("Force", CFrame.new(510, 4, 602))
-                    
-                    for Index, Value in Items do
-                        for _ = 1, Marshmellow_Increment do
-                            if GetNumberOfItemsInBackpack(Value) == Marshmellow_Increment then
-                                continue
-                            end
-
-                            local Added = false;
-                            local Child_Added; Child_Added = LocalPlayer.Backpack.ChildAdded:Connect(function(Child)
-                                if Child.Name == Value then
-                                    Added = true
-                                    Child_Added:Disconnect()
-                                end
-                            end)
-
-                            repeat task.wait(.1)
-                                ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("StorePurchase"):FireServer(Value)
-                            until Added == true
-                        end
-                    end
-
-                    task.wait(2.5)
-
-                    local House = GetHouse();
-
-                    if not House then
-                        local HouseToBuy = Config.GetUnclaimedApartment()
-
-                        if not HouseToBuy then repeat task.wait(1)
-                            Library:Notification({
-                                Name = "Valary.gg | Info",
-                                Description = "House not found, waiting until a house is available. or consider hopping server.",
-                                Duration = 1,
-                            })
-                        HouseToBuy = Config.GetUnclaimedApartment() until HouseToBuy end
-
-                        Config:Teleport(HouseToBuy.Board.backboard.CFrame, true)
-
-                        task.wait(1)
-
-                        fireproximityprompt(HouseToBuy.Board:FindFirstChildWhichIsA("ProximityPrompt", true))
-
-                        task.wait(1)
-
-                        House = GetHouse()
-                    end 
-
-                    local Personal_Apartment = Config.GetPersonalApartment()
-
-                    if Personal_Apartment.Door.Interact.Rotation ~= Vector3.new(0,90,0) and Personal_Apartment.Door.Interact.Rotation ~= Vector3.new(0,- 90,0) and Personal_Apartment.Door.Interact.Rotation ~= Vector3.new(180, 0,180) then
-                        local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(2, Enum.EasingStyle.Linear), {CFrame = Personal_Apartment.Door.Interact.CFrame})
-
-                        Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-
-                        task.wait(.5)
-
-                        fireproximityprompt(Personal_Apartment.Door.Interact.Attachment.ProximityPrompt)
-
-                        task.wait(1)
-                    end
-
-                    if Personal_Apartment.Door.DoorLock.Part.Rotation ~= Vector3.new(90,0,0) then
-                        local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(2, Enum.EasingStyle.Linear), {CFrame = Personal_Apartment.Door.Interact.CFrame})
-
-                        Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-
-                        task.wait(.5)
-
-                        fireproximityprompt(Personal_Apartment.Door.DoorLock.Part.ProximityPrompt)
-
-                        task.wait(.5)
-                    end
-
-                    local Interior = House:FindFirstChild("Interior") or House
-
-                    for Index, Value in Interior:GetChildren() do
-                        if Value.Name == "Floor" then
-                            Value.CanCollide = false
-                        end
-                    end
-
-                    local Pot = Interior["Cooking Pot"]
-
-                    Config:Teleport(Pot.CFrame, true)
-
-                    local tween_and_prompt = function(Prompt)
-                        if not Console_Server then
-                            if (House.Parent.Name == "Apartments") then
-                                local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(1, Enum.EasingStyle.Linear), {CFrame = Pot.CFrame + Vector3.new(0, 7, 0)})
-
-                                Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-
-                                task.wait(0.5)
-
-                                fireproximityprompt(Prompt)
-
-                                task.wait(2.5)
-
-                                Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(1, Enum.EasingStyle.Linear), {CFrame = Pot.CFrame + Vector3.new(0, 16, 0)})
-
-                                Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                            else
-                                fireproximityprompt(Prompt)
-                            end
-                        else
-                            if (House.Parent.Name == "Apartments") then
-                                Config:Teleport(Pot.CFrame + Vector3.new(0, 7, 0))
-
-                                task.wait(1.5)
-
-                                fireproximityprompt(Prompt)
-
-                                task.wait(2.5)
-
-                                Config:Teleport(CFrame.new(-746 + math.random(-25, 25), 53, 588 + math.random(-25, 25)))
-                            else
-                                Config:Teleport(Pot.CFrame + Vector3.new(0, 7, 0))
-
-                                task.wait(1.5)
-
-                                fireproximityprompt(Prompt)
-
-                                task.wait(2.5)
-
-                                Config:Teleport(CFrame.new(-746 + math.random(-25, 25), 53, 588 + math.random(-25, 25)))
-                            end    
-                        end
-                    end
-
-                    if not (House.Parent.Name == "Apartments") then
-                        local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(1, Enum.EasingStyle.Linear), {CFrame = Pot.CFrame - Vector3.new(0, 7, 0)})
-
-                        Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                    end
-
-                    --[[LocalPlayer.Character:FindFirstChild("Humanoid"):UnequipTools()
-
-                    task.wait();
-
-                    local Gun = Config.GetGun()
-
-                    if Gun then
-                        if Gun.Parent == LocalPlayer.Backpack then
-                            LocalPlayer.Character:FindFirstChild("Humanoid"):EquipTool(Gun)
-
-                            repeat RunService.Stepped:Wait() until Gun.Parent == LocalPlayer.Character
-                        end
-
-                        LocalPlayer.Character:FindFirstChild("Humanoid"):UnequipTools()
-
-                        task.wait();
-                    end]]
-                    
-                    if MarshMallowStep == "Sugar Block Bag" then
-                        repeat task.wait() until Pot.Timer.TextLabel.Text == "0"
-                        if not LocalPlayer.Character:FindFirstChild("Sugar Block Bag") then
-                            LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Sugar Block Bag"))
-                        end
-
-                        task.wait(1)
-
-                        --LocalPlayer.Character.HumanoidRootPart.CFrame = Pot.CFrame
-
-                        --task.wait(.5)
-
-                        tween_and_prompt(Pot.Attachment.ProximityPrompt)
-
-                        if not (House.Parent.Name == "Apartments") then
-                            task.wait(2.5)
-                        end
-
-                        --LocalPlayer.Character.HumanoidRootPart.CFrame = Pot.CFrame - Vector3.new(0, 7, 0)
-
-                        LocalPlayer.Character.Humanoid:UnequipTools()
-                        MarshMallowStep = "Gelatin"
-                    end
-
-                    if MarshMallowStep == "Gelatin" then
-                        LocalPlayer.Character.Humanoid:UnequipTools()
-
-                        task.wait(1)
-
-                        if not LocalPlayer.Character:FindFirstChild("Gelatin") then
-                            LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Gelatin"))
-                        end
-
-                        --LocalPlayer.Character.HumanoidRootPart.CFrame = Pot.CFrame
-
-                        --task.wait(.5)
-
-                        tween_and_prompt(Pot.Attachment.ProximityPrompt)
-
-                        if not (House.Parent.Name == "Apartments") then
-                            task.wait(2.5)
-                        end
-
-                        --LocalPlayer.Character.HumanoidRootPart.CFrame = Pot.CFrame - Vector3.new(0, 7, 0)
-
-                        MarshMallowStep = "Collect"
-                    end
-
-                    if MarshMallowStep == "Collect" then
-                        repeat task.wait() until Pot.Timer.TextLabel.Text == "0"
-
-                        if not LocalPlayer.Character:FindFirstChild("Empty Bag") then
-                            LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Empty Bag"))
-                        end
-
-                        --LocalPlayer.Character.HumanoidRootPart.CFrame = Pot.CFrame
-
-                        task.wait(1)
-
-                        tween_and_prompt(Pot.Attachment.ProximityPrompt)
-
-                        if not (House.Parent.Name == "Apartments") then
-                            task.wait(2.5)
-                        end
-                        --LocalPlayer.Character.HumanoidRootPart.CFrame = Pot.CFrame - Vector3.new(0, 7, 0)
-
-                        LocalPlayer.Character.Humanoid:UnequipTools()
-                        
-                        MarshMallowStep = "Water"
-                    end
-
-                    if MarshMallowStep ~= "Sell" then
-                        local Water, Gel, Sug = {}, {}, {}
-
-                        for _, Value in ipairs(LocalPlayer.Backpack:GetChildren()) do
-                            if Value.Name == "Sugar Block Bag" then
-                                table.insert(Sug, Value)
-                            elseif Value.Name == "Gelatin" then
-                                table.insert(Gel, Value)
-                            elseif Value.Name == "Water" then
-                                table.insert(Water, Value)
-                            end
-                        end
-
-                        local highestCommon = math.min(#Water, #Gel, #Sug)
-
-                        for _ = 1, highestCommon do
-                            if MarshMallowStep == "Water" then
-                                if not LocalPlayer.Character:FindFirstChild("Water") then
-                                    LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Water"))
-                                end
-
-                                --LocalPlayer.Character.HumanoidRootPart.CFrame = Pot.CFrame
-
-                                task.wait(1)
-
-                                tween_and_prompt(Pot.Attachment.ProximityPrompt)
-
-                                if not (House.Parent.Name == "Apartments") then
-                                    task.wait(2.5)
-                                end     
-
-                                MarshMallowStep = "Sugar Block Bag"
-                            end
-
-                            if MarshMallowStep == "Sugar Block Bag" then
-                                repeat task.wait() until Pot.Timer.TextLabel.Text == "0"
-
-                                if not LocalPlayer.Character:FindFirstChild("Sugar Block Bag") then
-                                    LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Sugar Block Bag"))
-                                end
-
-                                task.wait(1)
-
-                                tween_and_prompt(Pot.Attachment.ProximityPrompt)
-
-                                if not (House.Parent.Name == "Apartments") then
-                                    task.wait(2.5)
-                                end
-
-                                LocalPlayer.Character.Humanoid:UnequipTools()
-                                MarshMallowStep = "Gelatin"
-                            end
-
-                            if MarshMallowStep == "Gelatin" then
-                                repeat task.wait() until Pot.Timer.TextLabel.Text == "0"
-
-                                local HumanoidConnection; HumanoidConnection = LocalPlayer.Character.Humanoid.Died:Connect(function()
-                                    MarshMallowStep = "Water"
-                                    HumanoidConnection:Disconnect()
-                                end)
-
-                                LocalPlayer.Character.Humanoid:UnequipTools()
-
-                                task.wait(1)
-
-                                if not LocalPlayer.Character:FindFirstChild("Gelatin") then
-                                    LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Gelatin"))
-                                end
-
-                                tween_and_prompt(Pot.Attachment.ProximityPrompt)
-
-                                if not (House.Parent.Name == "Apartments") then
-                                    task.wait(2.5)
-                                end
-
-                                MarshMallowStep = "Collect"
-
-                                HumanoidConnection:Disconnect()
-                            end
-
-                            if MarshMallowStep == "Collect" then
-                                repeat task.wait() until Pot.Timer.TextLabel.Text == "0"
-
-                                local HumanoidConnection; HumanoidConnection = LocalPlayer.Character.Humanoid.Died:Connect(function()
-                                    MarshMallowStep = "Water"
-                                    HumanoidConnection:Disconnect()
-                                end)
-                                
-                                if not LocalPlayer.Character:FindFirstChild("Empty Bag") then
-                                    LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Empty Bag"))
-                                end
-
-                                task.wait(1)
-
-                                tween_and_prompt(Pot.Attachment.ProximityPrompt)
-
-                                task.wait(1)
-
-                                LocalPlayer.Character.Humanoid:UnequipTools()
-                                
-                                if _ == Marshmellow_Increment --[[MarshmallowIncrement]] then
-                                    MarshMallowStep = "Sell"
-                                else
-                                    MarshMallowStep = "Water"
-                                end
-
-                                HumanoidConnection:Disconnect()
-                            end
-                        end
-                    end
-
-                    if MarshMallowStep == "Sell" then
-                        Config:Teleport(CFrame.new(510, 4, 602), true, true)
-
-                        repeat task.wait() until Workspace.Folders.NPCs:FindFirstChild('Lamont Bell')
-
-                        task.wait(1)
-
-                        local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(2.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(511, 4, 598)})
-
-                        Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-
-                        for Index, Value in LocalPlayer.Backpack:GetChildren() do
-                            if Value:IsA("Tool") and Value.Name:find("Marshmallow") then
-                                LocalPlayer.Character.Humanoid:EquipTool(Value)
-                                fireproximityprompt(Workspace.Folders.NPCs["Lamont Bell"].UpperTorso.ProximityPrompt)
-                                Config.South_Bronx.Farm_Data.Marshmellows_Sold+=1
-
-                                task.wait(0.25)
-                            end
-                        end
-
-                        MarshMallowStep = "Water"
-                    end
-                end
-            end))
-        end
-
-        Stop_MarshmallowFarm = LPH_NO_VIRTUALIZE(function()
-            if not MarshmallowFarm_Thread then return end
-            if coroutine.status(MarshmallowFarm_Thread) == "suspended" then
-                task.cancel(MarshmallowFarm_Thread)
-            end
-            Teleport_Debounce = false
-            Config.DeleteHiddenScreen()
-        end)
-
-        local Last_TaskUpdate_Text
-
-        task.spawn(LPH_NO_VIRTUALIZE(function()
-            while task.wait(.1) do
-                local Main = LocalPlayer.PlayerGui:FindFirstChild("Main")
-                
-                if Main then
-                    local TaskUpdate = Main:FindFirstChild("TaskUpdate") 
-
-                    if TaskUpdate then
-                        if TaskUpdate:FindFirstChild("TextLabel") then
-                            Last_TaskUpdate_Text = TaskUpdate:FindFirstChild("TextLabel").Text
+                for _, Value in next, {not LocalToolsOnly and Lighting, LocalPlayer.Backpack, LocalPlayer.Character ~= nil and LocalPlayer.Character} do
+                    if type(Value) == "userdata" then
+                        for _, _Value in next, Value:GetChildren() do
+                            --if _Value.Name == "TP9EliteTan" then continue end
+                            Result[#Result + 1] = _Value
                         end
                     end
                 end
-            end
-        end))
-
-        LocalPlayer.Character.Humanoid.Died:Connect(function()
-            if Last_TaskUpdate_Text == "Let the solution cook for 45 seconds." or Last_TaskUpdate_Text == "Bag the solution into the empty bag." then
-                Stop_MarshmallowFarm()
-
-                if not Config.Rejoiner.Enabled then
-                    LocalPlayer:Kick("Valary.gg | Died during empty bag step, aborting autofarm.")
-                else
-                    local src = [[
-                        repeat wait() until game:IsLoaded()
-
-                        if game.PlaceId == 13643807539 or game.PlaceId == 14413475235 or game.PlaceId == 15124180230 then
-                            getgenv().rejoined_and_farming = true
-                            
-                            script_key = readfile('valarygg_key.txt')
-
-                            loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/da9311f3c94e11c2dccd036885309e28.lua"))()
-                        end
-                    ]]
-
-                    writefile('valary_gg_sb_rejoiner_loadstring_DONT_EDIT.txt', src)
-
-                    queue_on_teleport([[
-                        queue_on_teleport("loadstring(readfile('valary_gg_sb_rejoiner_loadstring_DONT_EDIT.txt'))()")
-                    ]])
-
-                    if Console_Server then
-                        queue_on_teleport([[
-                            __namecall = nil
-                            __namecall = hookmetamethod(game, '__namecall', newcclosure(function(Self, ...)
-                                if getnamecallmethod() == 'IsTenFootInterface' then
-                                    return true
-                                end
-
-                                return __namecall(Self, ...)
-                            end))
-                        ]])
-                    end 
-
-                    game:GetService("TeleportService"):Teleport(10179538382)
-                end
-            end
-        end)
-
-        LocalPlayer.CharacterAdded:Connect(function(Character)
-            Character:WaitForChild("Humanoid").Died:Connect(function()
-                if Last_TaskUpdate_Text == "Let the solution cook for 45 seconds." or Last_TaskUpdate_Text == "Bag the solution into the empty bag." then
-                    Stop_MarshmallowFarm()
-
-                    if not Config.Rejoiner.Enabled then
-                        LocalPlayer:Kick("Valary.gg | Died during empty bag step, aborting autofarm.")
-                    else
-                        local src = [[
-                            repeat wait() until game:IsLoaded()
-
-                            if game.PlaceId == 13643807539 or game.PlaceId == 14413475235 or game.PlaceId == 15124180230 then
-                                getgenv().rejoined_and_farming = true
-                                
-                                script_key = readfile('valarygg_key.txt')
-
-                                loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/da9311f3c94e11c2dccd036885309e28.lua"))()
-                            end
-                        ]]
-
-                        writefile('valary_gg_sb_rejoiner_loadstring_DONT_EDIT.txt', src)
-
-                        queue_on_teleport([[
-                            queue_on_teleport("loadstring(readfile('valary_gg_sb_rejoiner_loadstring_DONT_EDIT.txt'))()")
-                        ]])
-
-                        if Console_Server then
-                            queue_on_teleport([[
-                                __namecall = nil
-                                __namecall = hookmetamethod(game, '__namecall', newcclosure(function(Self, ...)
-                                    if getnamecallmethod() == 'IsTenFootInterface' then
-                                        return true
-                                    end
-
-                                    return __namecall(Self, ...)
-                                end))
-                            ]])
-                        end 
-
-                        game:GetService("TeleportService"):Teleport(10179538382)
-                    end
-                end
+    
+                return Result
             end)
-        end)
 
-        local ChipFarm_Thread
+            local GetPercentage = LPH_NO_VIRTUALIZE(function(DefaultValue, NewValue)
+                NewValue = math.max(0, math.min(100, NewValue))
 
-        Start_ChipFarm = function()
-            ChipFarm_Thread = task.spawn(LPH_JIT_MAX(function()
-                while task.wait(1) do
-                    if not Config.South_Bronx.FarmingUtilities.ChipFarm then continue end
+                local newRecoil = DefaultValue * (NewValue / 100)
+            
+                return newRecoil
+            end)
 
-                    if not LocalPlayer.Backpack:FindFirstChild("Flour") or not LocalPlayer.Backpack:FindFirstChild("Potato") then
-                        Config.Teleport("Force", CFrame.new(-773, 4, -197))
-                                    
-                        if not LocalPlayer.Backpack:FindFirstChild("Flour") then
-                            repeat
-                            ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("StorePurchase"):FireServer("Flour")
-                            task.wait(.1)
-                            until LocalPlayer.Backpack:FindFirstChild("Flour")
-                        end
-                
-                        if not LocalPlayer.Backpack:FindFirstChild("Potato") then
-                            repeat
-                            ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("StorePurchase"):FireServer("Potato")
-                            task.wait(.1)
-                            until LocalPlayer.Backpack:FindFirstChild("Potato")
-                        end
-                    end
-                
-                    repeat task.wait() until LocalPlayer.Backpack:FindFirstChild("Potato") and LocalPlayer.Backpack:FindFirstChild("Flour")
-                                
-                    Config.Teleport("Force", CFrame.new(-479, 4, -437))
+            local Ammo_Task = nil
+            local Mag_Task = nil
 
-                    task.wait(3)
-                                    
-                    local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(2.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(-479, 4, -437)})
+            local ModWeapon = LPH_NO_VIRTUALIZE(function(Weapon)
+                local Module = Weapon:FindFirstChildOfClass("ModuleScript")
+                local OldConfig = OldWeaponValues[Weapon.Name]
 
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                
-                    xpcall(function()
-                        replicatesignal(Workspace.Map.Locations["The Laboratory"].Prompts.Clipboard.ProximityPrompt.TriggeredActionReplicated, LocalPlayer)
-                    end, function()
-                        Workspace.Map.Locations["The Laboratory"].Prompts.Clipboard.ProximityPrompt:InputHoldBegin()
-
-                        task.wait(Workspace.Map.Locations["The Laboratory"].Prompts.Clipboard.ProximityPrompt.HoldDuration)
-
-                        Workspace.Map.Locations["The Laboratory"].Prompts.Clipboard.ProximityPrompt:InputHoldEnd()
-                    end)
-                
-                    task.wait(2)
-                
-                    local CookingBoard = GetCuttingBoard()
-
-                    local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(7.5, Enum.EasingStyle.Linear), {CFrame = CookingBoard.Part.CFrame})
-
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                
-                    if not LocalPlayer.Character:FindFirstChild("Potato") then
-                        LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Potato"))
-                    end
-                
-                    task.wait(2)
-                                
-                    xpcall(function()
-                        replicatesignal(CookingBoard:FindFirstChildWhichIsA("ProximityPrompt", true).TriggeredActionReplicated, LocalPlayer)
-                    end, function()
-                        CookingBoard:FindFirstChildWhichIsA("ProximityPrompt", true):InputHoldBegin()
-
-                        task.wait(CookingBoard:FindFirstChildWhichIsA("ProximityPrompt", true).HoldDuration)
-
-                        CookingBoard:FindFirstChildWhichIsA("ProximityPrompt", true):InputHoldEnd()
-                    end)
-
-                    task.wait(3)
-
-                    local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(2.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(-463, 4, -473)})
-
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                
-                    xpcall(function()
-                        replicatesignal(Workspace.Map.Locations["The Laboratory"].Prompts["Plastic Bag"].Attachment.ProximityPrompt.TriggeredActionReplicated, LocalPlayer)
-                    end, function()
-                        Workspace.Map.Locations["The Laboratory"].Prompts["Plastic Bag"].Attachment.ProximityPrompt:InputHoldBegin()
-
-                        task.wait(Workspace.Map.Locations["The Laboratory"].Prompts["Plastic Bag"].Attachment.ProximityPrompt.HoldDuration)
-
-                        Workspace.Map.Locations["The Laboratory"].Prompts["Plastic Bag"].Attachment.ProximityPrompt:InputHoldEnd()
-                    end)
-                
-                    task.wait(1.5)
-
-                    local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(4, Enum.EasingStyle.Linear), {CFrame = CFrame.new(-466, 4, -522)})
-
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                
-                    local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(7.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(-466, 4, -474)})
-
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                
-                    local Bowl = GetBowl()
-
-                    local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(5, Enum.EasingStyle.Linear), {CFrame = Bowl.CamPart.CFrame})
-
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                
-                    if not LocalPlayer.Character:FindFirstChild("Flour") then
-                        LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Flour"))
-                    end
-                
-                    task.wait(1)
-
-                    xpcall(function()
-                        replicatesignal(Bowl.ProximityPrompt.TriggeredActionReplicated, LocalPlayer)
-                    end, function()
-                        Bowl.ProximityPrompt:InputHoldBegin()
-
-                        task.wait(Bowl.ProximityPrompt.HoldDuration)
-
-                        Bowl.ProximityPrompt:InputHoldEnd()
-                    end)
-                                
-                    task.wait(5)
-                
-                    --[[local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(2.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(-466, 4, -518)})
-
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil]]
-
-                    local Tween = Services.TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(7.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(-467, 4, -470)})
-
-                    Tween:Play() ; Tween.Completed:Wait() ; Tween = nil
-                
-                    local Pot = GetPot()
-                
-                    LocalPlayer.Character.Humanoid:MoveTo(Pot.Position)
-
-                    LocalPlayer.Character.Humanoid.MoveToFinished:Wait()
-
-                    task.wait(1)
-                
-                    xpcall(function()
-                        replicatesignal(Pot.ProximityPrompt.TriggeredActionReplicated, LocalPlayer)
-                    end, function()
-                        Pot.ProximityPrompt:InputHoldBegin()
-
-                        task.wait(Pot.ProximityPrompt.HoldDuration)
-
-                        Pot.ProximityPrompt:InputHoldEnd()
-                    end)
-
-                    task.wait(70)
-                    
-                    local Hobo = Config.GetHobo()
-
-                    if not Hobo then
-                        repeat wait(1)
-                            Hobo = Config.GetHobo()
-                        until Hobo ~= nil
-                    end 
-
-                    Config.Teleport("Force", Pot.CFrame)
-
-                    xpcall(function()
-                        replicatesignal(Pot.ProximityPrompt.TriggeredActionReplicated, LocalPlayer)
-                    end, function()
-                        Pot.ProximityPrompt:InputHoldBegin()
-
-                        task.wait(Pot.ProximityPrompt.HoldDuration)
-
-                        Pot.ProximityPrompt:InputHoldEnd()
-                    end)
-                
-                    repeat task.wait() until LocalPlayer.Backpack:FindFirstChild("Potato Chips")
-
-                    Config.Teleport("Force", Workspace.Folders.NPCs:FindFirstChild("Poor Guy").Head.CFrame)
-
-                    task.wait(0.1)
-
-                    fireproximityprompt(Workspace.Folders.NPCs["Poor Guy"].UpperTorso.ProximityPrompt)
-
-                    task.wait(0.1)
-
-                    Config.Teleport("Force", Hobo.Head.CFrame)
-
-                    task.wait(1)
-
-                    PressKey(Enum.KeyCode.W, .25) task.wait(.25)
-                    PressKey(Enum.KeyCode.S, .25) task.wait(.25)
-                    PressKey(Enum.KeyCode.A, .25) task.wait(.25)
-                    PressKey(Enum.KeyCode.D, .25) task.wait(.25)
-                        
-                    task.wait(1.25)
-
-                    if not LocalPlayer.Character:FindFirstChild("Hot Chips") then
-                        LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Hot Chips"))
-                    end
+                if not OldConfig then
+                    return
+                end
     
-                    --[[LocalPlayer.Character.Humanoid:MoveTo(Hobo:FindFirstChild("RightLowerLeg", true).Position)
-
-                    LocalPlayer.Character.Humanoid.MoveToFinished:Wait()]]
-
-                    task.wait(4)
-                
-                    local prompt = Hobo:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-                    fireproximityprompt(prompt)
-
-                    Config.South_Bronx.Farm_Data.Chips_Sold+=1
-                end
-            end))
-        end
-        
-        Stop_ChipFarm = LPH_NO_VIRTUALIZE(function()
-            if not ChipFarm_Thread then return end
-            if coroutine.status(ChipFarm_Thread) == "suspended" then
-                task.cancel(ChipFarm_Thread)
-            end
-            Teleport_Debounce = false
-            Config.DeleteHiddenScreen()
-        end)
-
-        Config.TriggerButton = LPH_JIT_MAX(function(Self, Button, Event)
-            if not Device_Mobile then
-                if not Event then
-                    Event = "MouseButton1Down"
+                if Module and Module.Name == "Setting" then
+                    Module = require(Module)
+                else
+                    return
                 end
 
-                replicatesignal(Button[Event], 1, 1)
-            else
-                replicatesignal(Button.TouchTap)
-            end
-        end)
+                if SetInfiniteAmmo == nil then
+                    SetInfiniteAmmo = true
+                end
 
-        local CardFarm_Thread
+                if SetInfiniteClips == nil then
+                    SetInfiniteClips = true
+                end
 
-        Start_CardFarm = function()
-            CardFarm_Thread = task.spawn(LPH_JIT_MAX(function()
-                while task.wait(1) do
-                    if not Config.South_Bronx.FarmingUtilities.CardFarm then continue end
-                    if not LocalPlayer.Character then continue end
-
-                    --if not LocalPlayer.Backpack:FindFirstChild("Fake ID") and not LocalPlayer.Character:FindFirstChild("Fake ID") and not LocalPlayer.Backpack:FindFirstChild("Card") and not LocalPlayer.Character:FindFirstChild("Card") then
-                        Config.Teleport("Force", CFrame.new(219, 4, -332))
-                        
-                        repeat task.wait(0.1) fireproximityprompt(Workspace.Folders.NPCs.FakeIDSeller.UpperTorso.Attachment:FindFirstChild("ProximityPrompt")) until LocalPlayer.Backpack:FindFirstChild("Fake ID") or LocalPlayer.Character:FindFirstChild("Fake ID")
+                if Config.The_Bronx._Modifications.InfiniteClips then
+                    if Mag_Task and coroutine.status(Mag_Task) == "suspended" then
+                        task.cancel(Mag_Task)
+                        Mag_Task = nil
+                    end
                     
-                        task.wait(1.25)
-                    --end
+                    Mag_Task = task.spawn(function()
+                        while true do
+                            task.wait(0.01)
 
-                    --if not LocalPlayer.Backpack:FindFirstChild("Card") and not LocalPlayer.Character:FindFirstChild("Card") then
-                        Config.Teleport("Force", CFrame.new(-49, 4, -321), true)
-                        
-                        task.wait(3)
-
-                        if not LocalPlayer.Backpack:FindFirstChild("Fake ID") and not LocalPlayer.Character:FindFirstChild("Fake ID") then
-                            continue
-                        end
-            
-                        local Application_Successful = false
-                        local Old ; Old = LocalPlayer.PlayerGui.Main.BasicNotification:GetPropertyChangedSignal("Text"):Connect(function()
-                            if not LocalPlayer.PlayerGui.Main.BasicNotification.Text:find("application") then return end
-            
-                            if LocalPlayer.PlayerGui.Main.BasicNotification.Text == "Your application was successful. Please allow 30 seconds for the bank to prepare your card." then
-                                Application_Successful = true
+                            if Config.The_Bronx._Modifications.InfiniteClips and Weapon ~= nil and Weapon.Parent ~= nil and LocalPlayer.Character ~= nil and Weapon.Parent == LocalPlayer.Character then
+                                debug.setupvalue(getsenv(Weapon:FindFirstChild("GunScript_Local")).Reload, 1, OldConfig.AmmoPerMag)
                             else
-                                Application_Successful = false
-                            end
-                        end)
-
-                        repeat task.wait() 
-                            if LocalPlayer.Backpack:FindFirstChild("Fake ID") then
-                                pcall(function()
-                                    LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Fake ID"))
-                                end)
-                            end
-
-                        until LocalPlayer.Character:FindFirstChild("Fake ID")
-
-                        repeat fireproximityprompt(Workspace.Folders.NPCs:FindFirstChild("Bank Teller").UpperTorso.Attachment:FindFirstChild("ProximityPrompt")) task.wait(1) until not LocalPlayer.Character:FindFirstChild("Fake ID")
-        
-                        task.wait(1)
-        
-                        LocalPlayer.PlayerGui.Main.BasicNotification:GetPropertyChangedSignal("Text"):Wait()
-        
-                        task.delay(3, function()
-                            Old:Disconnect()
-                        end)
-        
-                        task.wait(.5)
-        
-                        if Application_Successful == false then
-                            continue
-                        end
-        
-                        task.wait(31)
-                    --end
-
-                    local ATM;
-                        
-                    for Index, Value in Workspace.Map.ATMS:GetChildren() do
-                        if Value.ATMScreen.Transparency == 0 then
-                            ATM = Value
-                            break
-                        end
-                    end
-    
-                    if ATM == nil then
-                        repeat task.wait(1)
-    
-                        for Index, Value in Workspace.Map.ATMS:GetChildren() do
-                            if Value.ATMScreen.Transparency == 0 then
-                                ATM = Value
                                 break
                             end
                         end
-                        
-                        until ATM ~= nil
+                    end)
+
+                    SetInfiniteClips = false
+                end
+
+                if Config.The_Bronx._Modifications.InfiniteClips == false and SetInfiniteClips == false then
+                    debug.setupvalue(getsenv(Weapon:FindFirstChild("GunScript_Local")).Reload, 1, OldConfig.AmmoPerMag)
+
+                    SetInfiniteClips = true
+                end
+
+                if Config.The_Bronx._Modifications.InfiniteAmmo then
+                    if Ammo_Task and coroutine.status(Ammo_Task) == "suspended" then
+                        task.cancel(Ammo_Task)
+                        Ammo_Task = nil
+                    end
+                    
+                    Ammo_Task = task.spawn(function()
+                        while true do
+                            task.wait(0.01)
+
+                            if Config.The_Bronx._Modifications.InfiniteAmmo and Weapon ~= nil and Weapon.Parent ~= nil and LocalPlayer.Character ~= nil and Weapon.Parent == LocalPlayer.Character then
+                                debug.setupvalue(getsenv(Weapon:FindFirstChild("GunScript_Local")).Reload, 3, OldConfig.AmmoPerMag)
+                            else
+                                break
+                            end
+                        end
+                    end)
+
+                    SetInfiniteAmmo = false
+                end
+
+                if Config.The_Bronx._Modifications.InfiniteAmmo == false and SetInfiniteAmmo == false then
+                    debug.setupvalue(getsenv(Weapon:FindFirstChild("GunScript_Local")).Reload, 3, OldConfig.AmmoPerMag)
+
+                    SetInfiniteAmmo = true
+                end
+
+                --Module.LimitedAmmoEnabled = false
+
+                Module.FireRate = Config.The_Bronx._Modifications.ModifyFireRate and GetPercentage(OldConfig.FireRate, Config.The_Bronx._Modifications.FireRateSpeed) or OldConfig.FireRate
+                            
+                Module.ReloadTime = Config.The_Bronx._Modifications.InstantReload and 0.01 or OldConfig.ReloadTime
+                                
+                if Module.SpreadXY then
+                    Module.SpreadXY = Config.The_Bronx._Modifications.ModifySpreadValue and GetPercentage(OldConfig.SpreadXY, Config.The_Bronx._Modifications.SpreadPercentage) or OldConfig.SpreadXY
+                end
+
+                if Module.SpreadYX then
+                    Module.SpreadYX = Config.The_Bronx._Modifications.ModifySpreadValue and GetPercentage(OldConfig.SpreadYX, Config.The_Bronx._Modifications.SpreadPercentage) or OldConfig.SpreadYX
+                end
+
+                if Module.Spread then
+                    Module.Spread = Config.The_Bronx._Modifications.ModifySpreadValue and GetPercentage(OldConfig.Spread, Config.The_Bronx._Modifications.SpreadPercentage) or OldConfig.Spread
+                end
+
+                Module.SpreadX = Config.The_Bronx._Modifications.ModifySpreadValue and GetPercentage(OldConfig.SpreadX, Config.The_Bronx._Modifications.SpreadPercentage) or OldConfig.SpreadX
+                Module.SpreadY = Config.The_Bronx._Modifications.ModifySpreadValue and GetPercentage(OldConfig.SpreadY, Config.The_Bronx._Modifications.SpreadPercentage) or OldConfig.SpreadY
+
+                Module.Recoil = Config.The_Bronx._Modifications.ModifyRecoilValue and GetPercentage(OldConfig.Recoil, Config.The_Bronx._Modifications.RecoilPercentage) or OldConfig.Recoil
+
+                Module.BaseDamage = Config.The_Bronx._Modifications.InfiniteDamage and math.huge or OldConfig.BaseDamage
+
+                Module.Auto = Config.The_Bronx._Modifications.Automatic or OldConfig.Auto
+            
+                Module.JamChance = Config.The_Bronx._Modifications.DisableJamming and 0 or OldConfig.JamChance
+    
+                Module.Auto = Config.The_Bronx._Modifications.Automatic or OldConfig.Auto
+        
+                Module.EquipTime = Config.The_Bronx._Modifications.InstantEquip and 0.01 or OldConfig.EquipTime
+
+                Module.JamChance = Config.The_Bronx._Modifications.NoJam and 0 or OldConfig.JamChance
+            end)
+
+            local ModWeapons = LPH_NO_VIRTUALIZE(function()
+                for _, Weapon in next, GetAllTools(true) do
+                    if Weapon:IsA("Tool") then
+                        ModWeapon(Weapon)
+                    end
+                end
+            end)
+
+            local SetValues = LPH_NO_VIRTUALIZE(function()
+                for _, Weapon in next, GetAllTools() do
+                    if Weapon:IsA("Tool") then
+                        local Module = Weapon:FindFirstChildOfClass("ModuleScript")
+
+                        if Module and Module.Name == "Setting" then
+                            Module = require(Module)
+                        end
+
+                        if type(Module) == "table" and not OldWeaponValues[Weapon.Name] then
+                            OldWeaponValues[Weapon.Name] = {}
+
+                            local OldConfig = OldWeaponValues[Weapon.Name]
+
+                            for Index, Value in next, Module do
+                                OldConfig[Index] = Value
+                            end
+                        end
+                    end
+                end
+            end)
+
+            if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
+
+            LocalPlayer.Character.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function(Value)
+                if not Value:IsA("Tool") then return end
+                if Value:FindFirstChild("Setting") then
+                    Config.Gun_Held = true
+                    Config.Gun_Handle = Value:WaitForChild("Handle", 1)
+
+                    if HideGunSoundsConnection then
+                        HideGunSoundsConnection:Disconnect()
+                        HideGunSoundsConnection = nil
                     end
 
-                    Config.Teleport("Force", CFrame.new(-43, 4, -332))
+                    HideGunSoundsConnection = Value:WaitForChild("Handle").ChildAdded:Connect(function(_Child)
+                        task.wait();
 
-                    repeat task.wait() fireproximityprompt(Workspace.CardPickup.Attachment.ProximityPrompt) until LocalPlayer.Backpack:FindFirstChild("Card") or LocalPlayer.Character:FindFirstChild("Card")
-        
-                    local Teleport_Status = Config.Teleport("Force", ATMPositions[tostring(ATM)])
-        
-                    LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Card"))
-                    
-                    --PressKey(Enum.KeyCode.LeftShift, .25) task.wait(.25)
-                    PressKey(Enum.KeyCode.W, .1) task.wait(.251)
-                    PressKey(Enum.KeyCode.S, .1) task.wait(.25)
-                    PressKey(Enum.KeyCode.A, .1) task.wait(.25)
-                    PressKey(Enum.KeyCode.D, .1) task.wait(.25)
-                    
-                    task.wait(0.5)
-    
-                    LocalPlayer.Character.Humanoid:MoveTo(ATM.Position)
+                        if _Child:IsA("Sound") and Config.Hit_Sounds_Settings.HideNormalSounds then
+                            _Child:Destroy()
+                        end
+                    end)
+                end
 
-                    LocalPlayer.Character.Humanoid.MoveToFinished:Wait()
-    
-                    fireproximityprompt(ATM.Attachment.ProximityPrompt)
-                    
-                    if ATM.ATMScreen.Transparency == 1 then
-                        continue
-                    end
-    
-                    repeat RunService.RenderStepped:Wait() until LocalPlayer.PlayerGui:FindFirstChild("ATM")
+                SetValues()
 
-                    Config:TriggerButton(LocalPlayer.PlayerGui.ATM.Frame.Swipe, "MouseButton1Click")
+                ModWeapon(Value);
+            end))
 
-                    Config.South_Bronx.Farm_Data.Cards_Swiped+=1
-    
-                    task.wait(1)
+            LocalPlayer.Character.ChildRemoved:Connect(LPH_NO_VIRTUALIZE(function(Value)
+                if not Value:IsA("Tool") then return end
+                if Value:FindFirstChild("Setting") then
+                    Config.Gun_Held = false
+                    Config.Gun_Handle = nil
                 end
             end))
-        end
 
-        Stop_CardFarm = LPH_NO_VIRTUALIZE(function()
-            if not CardFarm_Thread then return end
-            if coroutine.status(CardFarm_Thread) == "suspended" then
-                task.cancel(CardFarm_Thread)
-            end
-            Teleport_Debounce = false
-            Config.DeleteHiddenScreen()
-        end)
-
-        local Humanoid = LocalPlayer.Character:WaitForChild("Humanoid")
-
-        Death_CFrame = nil;
-
-        Humanoid.Died:Connect(function()
-            Teleport_Debounce = false
-
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                Death_CFrame = LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame
-            end
-
-            if Config.South_Bronx.FarmingUtilities.CardFarm then
-                Stop_CardFarm()
-            end
-
-            if Config.South_Bronx.FarmingUtilities.BoxFarm then
-                Stop_BoxFarm()
-            end
-
-            if Config.South_Bronx.FarmingUtilities.ChipFarm then
-                Stop_ChipFarm()
-            end 
-
-            if Config.South_Bronx.FarmingUtilities.MarshmallowFarm then
-                Stop_MarshmallowFarm()
-            end
-        end)
-
-        Buy_Gun = LPH_JIT_MAX(function()
-            if not Config.South_Bronx.FarmingUtilities.AutoBuyGun then return end
-
-            local Success, Error = pcall(function()
-                local Prompt_CFrame, Old_CFrame = Gun_Locations['Glock 43'], LocalPlayer.Character.HumanoidRootPart.CFrame
-
-                local ChildAdded_Check; ChildAdded_Check = LocalPlayer.Backpack.ChildAdded:Connect(function(Child)
-                    if Child.Name == 'Glock 43' then
-                        ItemReceieved = true
-                        DidntBuy = false
-
-                        ChildAdded_Check:Disconnect();
-                    end
-                end)
-
-                Config:Teleport(Prompt_CFrame, true)
-
-                task.wait(2.5)
-
-                task.delay(3, function()
-                    if not ItemReceieved then
-                        ItemReceieved = true
-                        DidntBuy = true
-                    end
-                end)
-
-                fireproximityprompt(Workspace.Folders:FindFirstChild("PromptPurchases")['Glock 43'].proxprompt:FindFirstChildOfClass("ProximityPrompt"))
-
-                repeat RunService.RenderStepped:Wait() until ItemReceieved == true
-
-                task.wait(0.5)
-            end)
-
-            if Error then
-                warn("AUTO-BUY-GUN ERROR:", Error)
-            end
-        end)
+            LocalPlayer.Backpack.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function(Value)
+                if not Value:IsA("Tool") then return end
                 
-        local Buy_Mask = LPH_JIT_MAX(function()
-            if not Config.South_Bronx.FarmingUtilities.AutoBuyMask then return end
+                SetValues()
 
-            local Success, Error = pcall(function()
-                local Prompt_CFrame, Old_CFrame = Gun_Locations['Mask'], LocalPlayer.Character.HumanoidRootPart.CFrame
+                ModWeapon(Value);
+            end))
 
-                local ChildAdded_Check; ChildAdded_Check = LocalPlayer.Backpack.ChildAdded:Connect(function(Child)
-                    if Child.Name == 'Mask' then
-                        ItemReceieved = true
-                        DidntBuy = false
-
-                        ChildAdded_Check:Disconnect();
-                    end
-                end)
-
-                Config:Teleport(Prompt_CFrame, true)
-
-                task.wait(2.5)
-
-                task.delay(3, function()
-                    if not ItemReceieved then
-                        ItemReceieved = true
-                        DidntBuy = true
-                    end
-                end)
-
-                fireproximityprompt(Workspace.Folders:FindFirstChild("PromptPurchases")['Mask'].proxprompt:FindFirstChildOfClass("ProximityPrompt"))
-
-                repeat RunService.RenderStepped:Wait() until ItemReceieved == true
-
-                task.wait(0.5)
-            end)
-
-            if Error then
-                warn("AUTO-BUY-MASK ERROR:", Error)
-            end
-        end)
-
-        LocalPlayer.CharacterAdded:Connect(function(Character)
-            local Teleport_Reset = Config.Reset_Teleporting
-            Humanoid = Character:WaitForChild("Humanoid")
-
-            if Library then
-                local Method = Library.Flags["SouthBronx/Teleport/Method"]
-
-                if Method == "Instant (Requires Gun)" then
-                    Method = "Instant"
-                end
-                
-                Config.South_Bronx.Teleport_Method = Method
-            end
-
-            -- Config.South_Bronx.KillAura.Enabled = 
-
-            if Library and Config.South_Bronx.Spawn_Where_You_Died and Death_CFrame and not Config.Reset_Teleporting then
-                Death_CFrame = Death_CFrame + Vector3.new(0,3,0)
-
-                local Start = tick()
-
-                repeat RunService.Stepped:Wait()
-                    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                        Start = tick()
-                        continue
-                    end
-                    
-                    local HumanoidRootPart = Character.HumanoidRootPart
-                    local LookVector = HumanoidRootPart.CFrame.LookVector
-                    HumanoidRootPart.CFrame = CFrame.new(Death_CFrame.Position, Death_CFrame.Position + LookVector)
-                until tick() - Start >= 2
-            end
-
-            task.wait(3)
-
-            if not Config.Reset_Teleporting and Config.South_Bronx.FarmingUtilities.AutoBuyGun and (Config.South_Bronx.FarmingUtilities.CardFarm or Config.South_Bronx.FarmingUtilities.BoxFarm or Config.South_Bronx.FarmingUtilities.ChipFarm or Config.South_Bronx.FarmingUtilities.MarshmallowFarm) then
-                repeat
-                    Buy_Gun()
-                    task.wait(1)
-                until LocalPlayer.Backpack:FindFirstChild("Glock 43") or LocalPlayer.Character:FindFirstChild("Glock 43")
-
-                task.wait(3)
-            end
-
-            if not Config.Reset_Teleporting and Config.South_Bronx.FarmingUtilities.AutoBuyMask and (Config.South_Bronx.FarmingUtilities.CardFarm or Config.South_Bronx.FarmingUtilities.BoxFarm or Config.South_Bronx.FarmingUtilities.ChipFarm or Config.South_Bronx.FarmingUtilities.MarshmallowFarm) then
-                repeat
-                    Buy_Mask()
-                    task.wait(1)
-                until LocalPlayer.Backpack:FindFirstChild("Mask") or LocalPlayer.Character:FindFirstChild("Mask")
-                
-                task.wait(3)
-
-                Humanoid:UnequipTools()
-
-                Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Mask"))
-
-                task.wait(0.5)
-
-                LocalPlayer.Character:FindFirstChild("Mask")
-
-                local args = {
-                    buffer.fromstring("\005"),
-                    LocalPlayer.Character:FindFirstChild("Mask")
-                }
-
-                ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("RPC"):FireServer(unpack(args))
-
-                Humanoid:UnequipTools()
-
-                task.wait(1)
-            end
-
-            if not Teleport_Reset then
-                if Config.South_Bronx.FarmingUtilities.CardFarm then
-                    Stop_CardFarm()
-                    task.wait(5)
-                    Start_CardFarm()
-                end
-
-                if Config.South_Bronx.FarmingUtilities.BoxFarm then
-                    Stop_BoxFarm()
-                    task.wait(5)
-                    Start_BoxFarm()
-                end
-
-                if Config.South_Bronx.FarmingUtilities.ChipFarm then
-                    Stop_ChipFarm()
-                    task.wait(5)
-                    Start_ChipFarm()
-                end
-
-                if Config.South_Bronx.FarmingUtilities.MarshmallowFarm then
-                    Stop_MarshmallowFarm()
-                    task.wait(5)
-                    if Config.South_Bronx.FarmingUtilities.MarshmallowFarm  then
-
-                        --[[if Config.GetPersonalApartment() then
-                            Config:Teleport(Config.GetPersonalApartment().Board.backboard.CFrame, true)
-
-                            task.wait(1.5)
-
-                            fireproximityprompt(Config.GetPersonalApartment().Board.backboard.ProximityPrompt)
-
-                            repeat task.wait(.1) until not Config.GetPersonalApartment() 
-                            MarshMallowStep = "Water"
-                        end]]
-
-                        MarshMallowStep = "Water"
-
-                        Start_MarshmallowFarm()
-                    end
-                end
-            end
-
-            Humanoid.Died:Connect(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    Death_CFrame = LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame
-                end
-
-                if not Teleport_Reset then
-                    if Config.South_Bronx.FarmingUtilities.CardFarm then
-                        Stop_CardFarm()
-                    end
-
-                    if Config.South_Bronx.FarmingUtilities.BoxFarm then
-                        Stop_BoxFarm()
-                    end
-
-                    if Config.South_Bronx.FarmingUtilities.ChipFarm then
-                        Stop_ChipFarm()
-                    end
-
-                    if Config.South_Bronx.FarmingUtilities.MarshmallowFarm then
-                        Stop_MarshmallowFarm()
-                    end
-                end
-            end)
-        end)
-
-        local StartingAmount = nil;
-
-        task.spawn(LPH_NO_VIRTUALIZE(function()
-            while task.wait(1) do
-                if not Config.South_Bronx.FarmingUtilities.CardFarm and not Config.South_Bronx.FarmingUtilities.ChipFarm and not Config.South_Bronx.FarmingUtilities.BoxFarm and not Config.South_Bronx.FarmingUtilities.MarshmallowFarm then continue end
-
-                if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
-                    if LocalPlayer:FindFirstChild("PlayerGui"):FindFirstChild("Main") then
-                        local Main = LocalPlayer:FindFirstChild("PlayerGui"):FindFirstChild("Main")
-
-                        if Main:FindFirstChild("Money") then
-                            if Main:FindFirstChild("Money"):FindFirstChild("Amount") then
-                                local Balance = LocalPlayer.PlayerGui.Main.Money.Amount.Text:match("%$([%d,]+)")
-                                Balance = Balance:gsub(",", "")
-
-                                if StartingAmount == nil then StartingAmount = Balance end
-
-                                if (tonumber(Balance) - tonumber(StartingAmount)) > 500000 then
-                                    if Config.South_Bronx.FarmingUtilities.CardFarm then
-                                        Stop_CardFarm()
-                                    end
-
-                                    if Config.South_Bronx.FarmingUtilities.BoxFarm then
-                                        Stop_BoxFarm()
-                                    end
-
-                                    if Config.South_Bronx.FarmingUtilities.ChipFarm then
-                                        Stop_ChipFarm()
-                                    end
-
-                                    if Config.South_Bronx.FarmingUtilities.MarshmallowFarm then
-                                        Stop_MarshmallowFarm()
-                                    end
-
-                                    local ATM;
-
-                                    for Index, Value in Workspace.Map.ATMS:GetChildren() do
-                                        if Value.ATMScreen.Transparency == 0 then
-                                            ATM = Value
-                                            break
-                                        end
-                                    end
-
-                                    if not ATM then
-                                        repeat task.wait(1)
-                                            for Index, Value in Workspace.Map.ATMS:GetChildren() do
-                                                if Value.ATMScreen.Transparency == 0 then
-                                                    ATM = Value
-                                                    break
-                                                end
-                                            end
-                                        until ATM ~= nil
-                                    end
-
-                                    Config:Teleport(ATMPositions[ATM.Name], true, true)
-
-                                    task.wait(.5)
-
-                                    LocalPlayer.Character.Humanoid:MoveTo(ATM.Position)
-
-                                    LocalPlayer.Character.Humanoid.MoveToFinished:Wait()
-
-                                    task.wait(1)
-
-                                    fireproximityprompt(ATM.Attachment.ProximityPrompt)
-
-                                    local Arguments = {
-                                        "Deposit",
-                                        {
-                                            Amount = '500000'
-                                        }
-                                    }
-
-                                    Times_Deposited+=1
-
-                                    LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("ATM"):WaitForChild("Frame"):WaitForChild("UIController"):WaitForChild("RemoteFunction"):InvokeServer(unpack(Arguments))
-
-                                    task.wait(2.5)
-
-                                    if tostring(LocalPlayer.PlayerGui:FindFirstChild("ATM").Frame["Balance"].Text) == "Account Balance: $1750000" then
-                                        LocalPlayer:Kick("Valary.gg | AUTO-FARMING Stopped. You have $1,750,000 in the ATM.")
-                                        return
-                                    end
-
-                                    LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("ATM"):WaitForChild("Frame"):WaitForChild("UIController"):WaitForChild("RemoteFunction"):InvokeServer("Exit")
-
-                                    task.wait(3)
-
-                                    if Config.South_Bronx.FarmingUtilities.CardFarm then
-                                        Start_CardFarm()
-                                    end
-
-                                    if Config.South_Bronx.FarmingUtilities.BoxFarm then
-                                        Start_BoxFarm()
-                                    end
-
-                                    if Config.South_Bronx.FarmingUtilities.ChipFarm then
-                                        Start_ChipFarm()
-                                    end
-
-                                    if Config.South_Bronx.FarmingUtilities.MarshmallowFarm then
-                                        Start_MarshmallowFarm()
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end 
-        end))
-    end
-
-    task.spawn(LPH_NO_VIRTUALIZE(function()
-        while true do
-            task.wait(0.1)
-
-            if LocalPlayer.PlayerGui:FindFirstChild("ATM") then
-                pcall(function()
-                    Config.ATM_BALANCE = tostring(LocalPlayer.PlayerGui:FindFirstChild("ATM").Frame["Balance"].Text:gsub("Account Balance: ", ""))
-                end)
-            end
-        end
-    end))
-
-    do -- Weapon Modifications
-        local Old_States = {}
-        Config.Mod_Table = {}
-
-        Config.Mod = LPH_NO_VIRTUALIZE(function(Stat, Value)
-            local Old_Thread = getthreadidentity()
-
-            setthreadidentity(3)
-            for _, Upvalue in pairs(debug.getupvalues(Gun_Module.Jammed)) do
-                if typeof(Upvalue) == "table" then
-                    for _, Mod in pairs(Upvalue) do
-
-                        if typeof(Mod) == "table" and Mod.Module then
-                            Config.Mod_Table = Mod
-                            setreadonly(Mod.Module, false)
-                            Mod.Module[Stat] = Value
-                        end
-                    end
-                end
-            end
-
-            setthreadidentity(Old_Thread)
-        end)
-
-        Config.Slide = LPH_NO_VIRTUALIZE(function()
-            local Old_Thread = getthreadidentity()
-
-            setthreadidentity(3)
-            for _, Upvalue in pairs(debug.getupvalues(Gun_Module.Jammed)) do
-                if typeof(Upvalue) == "table" then
-                    for _, Mod in pairs(Upvalue) do
-                        if typeof(Mod) == "table" and Mod.Canshoot ~= nil then
-                            Mod.Canshoot = true
-                        end
-                    end
-                end
-            end
-
-            setthreadidentity(Old_Thread)
-        end)
-
-        Config.Get = function(DefaultValue, NewValue)
-            NewValue = math.max(0, math.min(100, NewValue))
-        
-            local new_value = DefaultValue * (NewValue / 100)
-        
-            return new_value
-        end
-
-        --[[ local RPC_Event; RPC_Event = hookmetamethod(ReplicatedStorage.RemoteEvents.ChangeMagAndAmmo, "__namecall", newcclosure(LPH_NO_VIRTUALIZE(function(Self, ...)
-            local Arguments = {...}
-            local Buffer = Arguments[1]
-
-            if getnamecallmethod() == "FireServer" and tostring(Self) == "ChangeMagAndAmmo" and Config["Infinite Ammo"] and #Arguments == 2 and typeof(Buffer) == "buffer" and typeof(Arguments[2]) == "Instance" and Arguments[2].ClassName == "Tool" then
-    
-                print(debug.traceback())
-                Arguments[2] = require(Arguments[2].Setting).AmmoPerMag
-    
-                return RPC_Event(Self, unpack(Arguments))
-            end
-    
-            return RPC_Event(Self, ...)
-        end))) ]]
-
-        local HideGunSoundsConnection;
-
-        Config.Modify = LPH_NO_VIRTUALIZE(function(Child)
-            if Child and Child:IsA("Tool") and Child:FindFirstChild("Setting") and require(Child.Setting).MaxAmmo then 
-                Config.Gun_Held = true
-
-                if HideGunSoundsConnection then
-                    HideGunSoundsConnection:Disconnect()
-                    HideGunSoundsConnection = nil
-                end
-
-                Config.Gun_Handle = Child:WaitForChild("Handle", 1)
-
-                HideGunSoundsConnection = Child.Handle.ChildAdded:Connect(function(_Child)
-                    task.wait();
-
-                    if _Child:IsA("Sound") and Config.Hit_Sounds_Settings.HideNormalSounds then
-                        _Child:Destroy()
-                    end
-                end)
-
-                if Config["Instant Equip"].Enabled then 
-                    task.delay(.1, Config.Slide)
-                end
-
-                local Old_Module = Old_States[tostring(Child)] 
-
-                if not Old_States[tostring(Child)] then
-                    Old_States[tostring(Child)] = table.clone(require(Child.Setting))
-
-                    Old_Module = Old_States[tostring(Child)]
-                end
-
-                if Config.Recoil.Enabled then 
-                    Config.Mod("Recoil", Config.Get(Old_Module.Recoil, Config.Recoil.Reduce))
-                else
-                    Config.Mod("Recoil", Old_Module.Recoil)
-                end
-
-                if Config.Spread.Enabled then 
-                    Config.Mod("SpreadX", Config.Get(Old_Module.SpreadX, Config.Recoil.Reduce))
-                    Config.Mod("SpreadY", Config.Get(Old_Module.SpreadY, Config.Recoil.Reduce))
-                else
-                    Config.Mod("SpreadX", Old_Module.SpreadX)
-                    Config.Mod("SpreadY", Old_Module.SpreadY)
-                end 
-
-                if Config["Force Auto"].Enabled then 
-                    Config.Mod("Auto", true)
-                else
-                    Config.Mod("Auto", Old_Module.Auto)
-                end
-
-                if Config["One Tap"].Enabled then
-                    Config.Mod("ShotgunEnabled", true)
-                else
-                    Config.Mod("ShotgunEnabled", Old_Module.ShotgunEnabled)
-                end
-
-                if Config["No Jam"].Enabled then 
-                    Config.Mod("JamChance", 0)
-                else
-                    Config.Mod("JamChance", Old_Module.JamChance)
-                end
-
-                if Config.Fire_Rate.Enabled then 
-                    Config.Mod("FireRate", Config.Get(Old_Module.FireRate, Config.Fire_Rate.Increase))
-                else
-                    Config.Mod("FireRate", Old_Module.FireRate)
-                end
-
-                if Config["Instant Bullet"].Enabled then 
-                    Config.Mod("BulletSpeed", 9e9)
-                else
-                    Config.Mod("BulletSpeed", Old_Module.BulletSpeed)
-                end 
-
-                if Config["Instant Reload"].Enabled then 
-                    Config.Mod("ReloadTime", 0)
-                else
-                    Config.Mod("ReloadTime", Old_Module.ReloadTime)
-                end
-
-                if Config["Instant Equip"].Enabled then 
-                    Config.Mod("EquippingTime", 0)
-                else
-                    Config.Mod("EquippingTime", Old_Module.EquippingTime)
-                end
-            end
-        end)
-
-        local ChildRemoved = LPH_NO_VIRTUALIZE(function(Child)
-            if Child:IsA("Tool") then
+            LocalPlayer.CharacterAdded:Connect(function(Character)
                 Config.Gun_Held = false
-            end
-        end)
-
-        Config.Set_Up = LPH_NO_VIRTUALIZE(function(Character)
-            Character.ChildAdded:Connect(Config.Modify)
-            Character.ChildRemoved:Connect(ChildRemoved)
-        end)
-
-        if LocalPlayer.Character then
-            Config.Set_Up(LocalPlayer.Character)
-        end
-
-        LocalPlayer.CharacterAdded:Connect(Config.Set_Up)
-
-        -- Kill Aura Loop
-            --[[task.spawn(LPH_NO_VIRTUALIZE(function()
-                while true do task.wait(.1)
-                    if Config.South_Bronx.KillAura.Enabled and LocalPlayer.Character then
-                        local Gun = Config.GetGun()
-
-                        if not Gun then continue end
-
-                        if Gun and Gun.Parent == LocalPlayer.Backpack or Gun.Parent == LocalPlayer.Character then
-                            for Index, Value in Players:GetPlayers() do
-                                if Value~=LocalPlayer then
-                                    if Config.NVX_Users[Value.Name] then continue end
-                                    if not Value.Character then continue end
-                                    if not LocalPlayer.Character then continue end
-                                    if table.find(Library.Friendly_Players, Value.Name) then continue end
-
-                                    local Head, Humanoid, HumanoidRootPart = Value.Character:FindFirstChild("Head"), Value.Character:FindFirstChild("Humanoid"), Value.Character:FindFirstChild("HumanoidRootPart") 
-                                
-                                    if not Head or not Humanoid or Humanoid.Health == 0 then
-                                        continue
-                                    end
-
-                                    if Config.InsideSafezone(Value) then
-                                        continue
-                                    end
-
-                                    if (LocalPlayer.Character.HumanoidRootPart.Position - HumanoidRootPart.Position).Magnitude <= Config.South_Bronx.KillAura.Range then
-                                        Config:ShootPlayer(Value.Name)
-                                    end
-                                end
-                            end
-                        end
+                Character.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function(Value)
+                    if not Value:IsA("Tool") then return end
+                    if Value:FindFirstChild("Setting") then
+                        Config.Gun_Held = true
+                        Config.Gun_Handle = Value:WaitForChild("Handle", 1)
                     end
-                end
-            end))]]
-        --
-    end
+
+                    if HideGunSoundsConnection then
+                        HideGunSoundsConnection:Disconnect()
+                        HideGunSoundsConnection = nil
+                    end
+
+                    HideGunSoundsConnection = Value.Handle.ChildAdded:Connect(function(_Child)
+                        task.wait();
+
+                        if _Child:IsA("Sound") and Config.Hit_Sounds_Settings.HideNormalSounds then
+                            _Child:Destroy()
+                        end
+                    end)
+    
+                    SetValues()
+
+                    ModWeapon(Value);
+                end))
+
+                Character.ChildRemoved:Connect(LPH_NO_VIRTUALIZE(function(Value)
+                    if not Value:IsA("Tool") then return end
+                    if Value:FindFirstChild("Setting") then
+                        Config.Gun_Held = false
+                        Config.Gun_Handle = nil
+                    end
+                end))
+    
+                LocalPlayer.Backpack.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function(Value)
+                    if not Value:IsA("Tool") then return end
+                        
+                    SetValues()
+
+                    ModWeapon(Value);
+                end))
+            end)
+
+            local ConfigMetatable = getmetatable(Config.The_Bronx.Modifications)
+
+            ConfigMetatable.__index = LPH_NO_VIRTUALIZE(function(...)
+                return Config.The_Bronx._Modifications[select(2, ...)]
+            end)
+    
+            ConfigMetatable.__newindex = LPH_NO_VIRTUALIZE(function(...)
+                local Index, Value = select(2, ...)
+    
+                Config.The_Bronx._Modifications[Index] = Value; ModWeapons()
+            end)
+        end
+    --
+
+    table.sort(Config.The_Bronx.Guns)
 end
 
 if getgenv().Library then
@@ -4026,8 +2172,8 @@ local Options, MiscOptions do
         -- Boxes
         ["Boxes"] = false;
         ["BoxType"] = "Corner";
-        ["Box Gradient 1"] = { Color = rgb(255, 255, 255), Transparency = 0.9 };
-        ["Box Gradient 2"] = { Color = rgb(255, 255, 255), Transparency = 0.4 };
+        ["Box Gradient 1"] = { Color = rgb(236,23,23), Transparency = 0.9 };
+        ["Box Gradient 2"] = { Color = rgb(0, 0, 0), Transparency = 0.4 };
         ["Box Gradient Rotation"] = 90;
         ["Box Fill"] = false; 
         ["Box Fill 1"] = { Color = rgb(255, 255, 255), Transparency = 0.9 };
@@ -4048,22 +2194,6 @@ local Options, MiscOptions do
         ["Healthbar_EasingStyle"] = "Circular";
         ["Healthbar_EasingDirection"] = "InOut";
         ["Healthbar_Easing_Speed"] = 1;
-
-        ["Ammobar"] = false;
-        ["Ammobar_Position"] = "Right";
-        ["Ammobar_Number"] = false;
-        ["Ammobar_Low"] = { Color = rgb(0, 98, 255), Transparency = 1 };
-        ["Ammobar_Medium"] = { Color = rgb(0, 130, 255), Transparency = 1 };
-        ["Ammobar_Animations"] = false;
-        ["Ammobar_High"] = { Color = rgb(0, 162, 255), Transparency = 1 };
-        ["Ammobar_Font"] = "Verdana";
-        ["Ammobar_Text_Size"] = 11;
-        ["Ammobar_Text_Color"] = rgb(255,255,255);
-        ["Ammobar_Thickness"] = 1;
-        ["Ammobar_Tween"] = false;
-        ["Ammobar_EasingStyle"] = "Circular";
-        ["Ammobar_EasingDirection"] = "InOut";
-        ["Ammobar_Easing_Speed"] = 1;
 
         -- Text Based Elements
         ["Name_Text"] = false; 
@@ -4213,7 +2343,7 @@ local Options, MiscOptions do
         function Esp.CreateObject( player, typechar ) -- IMPORTANT!
             local Data = { 
                 Items = { }, 
-                Info = {Character; Humanoid; Health = 0; Ammo = 0}; 
+                Info = {Character; Humanoid; Health = 0}; 
                 Drawings = { }, 
                 Type = typechar or "player";
                 Connections = {};
@@ -4419,32 +2549,6 @@ local Options, MiscOptions do
                             Name = "\0";
                             BackgroundTransparency = 1;
                             LayoutOrder = 99;
-                            BorderSizePixel = 0;
-                            ZIndex = 0;
-                            AutomaticSize = Enum.AutomaticSize.X;
-                            BackgroundColor3 = rgb(255, 255, 255)
-                        });
-
-                        Items.AmmobarTextsRight = Esp:Create( "Frame", {
-                            Visible = true;
-                            BorderColor3 = rgb(0, 0, 0);
-                            Parent = Esp.Cache;
-                            Name = "\0";
-                            BackgroundTransparency = 1;
-                            LayoutOrder = 99;
-                            BorderSizePixel = 0;
-                            ZIndex = 0;
-                            AutomaticSize = Enum.AutomaticSize.X;
-                            BackgroundColor3 = rgb(255, 255, 255)
-                        });
-
-                        Items.AmmobarTextsLeft = Esp:Create( "Frame", {
-                            Visible = true;
-                            BorderColor3 = rgb(0, 0, 0);
-                            Parent = Esp.Cache;
-                            Name = "\0";
-                            BackgroundTransparency = 1;
-                            LayoutOrder = -100;
                             BorderSizePixel = 0;
                             ZIndex = 0;
                             AutomaticSize = Enum.AutomaticSize.X;
@@ -4738,63 +2842,6 @@ local Options, MiscOptions do
                     });
                 -- 
 
-                -- Ammo Bar
-                    Items.Ammobar = Esp:Create( "Frame" , {
-                        Name = "Right";
-                        Parent = Esp.Cache;
-                        BorderColor3 = rgb(0, 0, 0);
-                        Size = dim2(0, 3, 0, 3);
-                        BorderSizePixel = 0;
-                        BackgroundColor3 = rgb(0, 0, 0)
-                    });
-
-                    Items.AmmobarAccent = Esp:Create( "Frame" , {
-                        Parent = Items.Ammobar;
-                        Name = "\0";
-                        Position = dim2(0, 1, 0, 1);
-                        BorderColor3 = rgb(0, 0, 0);
-                        Size = dim2(1, -2, 1, -2);
-                        BorderSizePixel = 0;
-                        BackgroundColor3 = rgb(255, 255, 255)
-                    });
-
-                    Items.AmmobarFade = Esp:Create( "Frame" , {
-                        Parent = Items.Ammobar;
-                        Name = "\0";
-                        Position = dim2(0, 1, 0, 1);
-                        BorderColor3 = rgb(0, 0, 0);
-                        Size = dim2(1, -2, 1, -2);
-                        BorderSizePixel = 0;
-                        BackgroundColor3 = rgb(0, 0, 0)
-                    });
-
-                    Items.AmmobarGradient = Esp:Create( "UIGradient" , {
-                        Enabled = true;
-                        Parent = Items.AmmobarAccent;
-                        Rotation = 90;
-                        Color = rgbseq{rgbkey(0, rgb(0, 255, 0)), rgbkey(0.5, rgb(255, 125, 0)), rgbkey(1, rgb(255, 0, 0))}
-                    });
-
-                    Items.AmmobarText = Esp:Create( "TextLabel", {
-                        FontFace = Fonts.Verdana;
-                        TextColor3 = rgb(255, 255, 255);
-                        BorderColor3 = rgb(0, 0, 0);
-                        Parent = Esp.Cache; -- Items.AmmobarTextsLeft
-                        Name = "\0";
-                        BackgroundTransparency = 1;
-                        Size = dim2(0, 0, 0, 0);
-                        BorderSizePixel = 0;
-                        AutomaticSize = Enum.AutomaticSize.XY;
-                        TextSize = 11;
-                        BackgroundColor3 = rgb(255, 255, 255)
-                    });
-
-                    Esp:Create( "UIStroke", {
-                        Parent = Items.AmmobarText;
-                        LineJoinMode = Enum.LineJoinMode.Miter
-                    });
-                --
-
                 -- Texts
                     Items.Text = Esp:Create( "TextLabel", {
                         FontFace = Fonts.Verdana;
@@ -4858,23 +2905,9 @@ local Options, MiscOptions do
                     });
                 -- 
             end
-            
-            local AmmoConnection, MagConnection = nil, nil
-            local Ammo_Debounce = false;
-            local Mag_Debounce = false;
-
+        
             Data.ToolAdded = LPH_NO_VIRTUALIZE(function(item)
                 if not item or not item:IsA("Tool") then 
-                    if AmmoConnection then
-                        AmmoConnection:Disconnect()
-                        AmmoConnection = nil
-                    end
-
-                    if MagConnection then
-                        MagConnection:Disconnect()
-                        MagConnection = nil
-                    end
-
                     return 
                 end 
 
@@ -4883,40 +2916,6 @@ local Options, MiscOptions do
                     exists = "None"
                 end
                 Items["Weapon"].Text = "[" .. tostring(exists) .. "]"
-                
-                if item:FindFirstChild("Setting") then
-                    if AmmoConnection then
-                        AmmoConnection:Disconnect()
-                        AmmoConnection = nil
-                    end
-
-                    if MagConnection then
-                        MagConnection:Disconnect()
-                        MagConnection = nil
-                    end
-
-                    local mag, ammo = item:WaitForChild("Mag", 1), item:WaitForChild("Ammo", 1)
-
-                    if mag and ammo then
-                        MagConnection = item.Mag:GetPropertyChangedSignal("Value"):Connect(function()
-                            if Mag_Debounce then return end
-                            Mag_Debounce = true
-                            Data.AmmoChanged(item)
-                            task.delay(.1, function()
-                                Mag_Debounce = false
-                            end)
-                        end)
-
-                        AmmoConnection = item.Ammo:GetPropertyChangedSignal("Value"):Connect(function()            
-                            if Ammo_Debounce then return end
-                            Ammo_Debounce = true
-                            Data.AmmoChanged(item)
-                            task.delay(.1, function()
-                                Ammo_Debounce = false
-                            end)
-                        end)
-                    end
-                end
 
                 --[[pcall(function()
                     Items["Weapon"].Parent = exists and Items["Holder"] or Esp.Cache
@@ -5003,99 +3002,6 @@ local Options, MiscOptions do
                 end 
             end)
 
-            Data.AmmoChanged = LPH_NO_VIRTUALIZE(function(Tool)
-                if not MiscOptions.Ammobar then 
-                    return 
-                end 
-
-                local AmmoPerMag, CurrentAmmo = 0, 0
-
-                local Character = Data.Info.Character
-
-                local IsGun = false;
-
-                if Tool and Character:FindFirstChild(Tool.Name) and Tool:GetAttribute("Ammo") then
-                    IsGun = true
-                    AmmoPerMag = require(Tool:WaitForChild("Setting")).AmmoPerMag
-                    CurrentAmmo = Tool:WaitForChild("Mag").Value
-                end
-
-                local Multiplier = CurrentAmmo / AmmoPerMag
-
-                if AmmoPerMag == 0 and CurrentAmmo == 0 then
-                    Multiplier = 1
-                end
-
-                local isHorizontal = MiscOptions.Ammobar_Position == "Top" or MiscOptions.Ammobar_Position == "Bottom"
-
-                local Color = MiscOptions.Ammobar_Low.Color:Lerp(MiscOptions.Ammobar_Medium.Color, Multiplier)
-                local Color_2 = Color:Lerp(MiscOptions.Ammobar_High.Color, Multiplier)
-
-                if MiscOptions.Ammobar_Number then 
-                    if Items.AmmobarText.Parent == Esp.Cache then 
-                        Options.Ammobar = MiscOptions.Ammobar_Position 
-                        Options.Ammobar_Number = true
-                    end
-                end 
-
-                if Multiplier>=1 then
-                    Items.AmmobarFade.Visible = false
-                else
-                    Items.AmmobarFade.Visible = true
-                end
-
-                if MiscOptions.Ammobar_Tween then  
-                    local Ammo = Data.Info.Ammo
-                    
-                    Esp:Tween(Items.AmmobarFade, {
-                        Size = dim2(isHorizontal and 1 - Multiplier or 1, isHorizontal and -2 or -2, isHorizontal and 1 or 1 - Multiplier, -2),
-                        Position = dim2(isHorizontal and Multiplier or 0, 1, 0, 1)
-                    }, TweenInfo.new(MiscOptions.Ammobar_Easing_Speed, Enum.EasingStyle[MiscOptions.Ammobar_EasingStyle], Enum.EasingDirection[MiscOptions.Ammobar_EasingDirection], 0, false, 0))
-                    Esp:Tween(Items.AmmobarText, {
-                        Position = dim2(isHorizontal and Multiplier or 0, isHorizontal and -(Items.AmmobarText.TextBounds.X / 2) or 0, isHorizontal and 0 or 1 - Multiplier, 0)
-                    }, TweenInfo.new(MiscOptions.Ammobar_Easing_Speed, Enum.EasingStyle[MiscOptions.Ammobar_EasingStyle], Enum.EasingDirection[MiscOptions.Ammobar_EasingDirection], 0, false, 0))
-
-                    task.spawn(function()
-                        local Start = tick()
-                        
-                        while true do
-                            if not Esp then 
-                                break 
-                            end 
-
-                            local Elapsed = tick() - Start
-                            local Alpha = math.clamp(Elapsed, 0, 1)
-
-                            local Value = Esp:Lerp(
-                                Data.Info.Ammo, 
-                                CurrentAmmo, 
-                                TweenService:GetValue(
-                                    Alpha, 
-                                    Enum.EasingStyle[MiscOptions.Ammobar_EasingStyle], 
-                                    Enum.EasingDirection[MiscOptions.Ammobar_EasingDirection]
-                                )
-                            )   
-
-                            Items.AmmobarText.Text = math.floor(Value) .. "/" .. AmmoPerMag
-
-                            if Elapsed >= MiscOptions.Ammobar_Easing_Speed then 
-                                Data.Info.Ammo = CurrentAmmo 
-                                break
-                            end
-
-                            task.wait()
-                        end                            
-                    end)
-                else 
-                    Items.AmmobarFade.Size = dim2(isHorizontal and 1 - Multiplier or 1, isHorizontal and -2 or -2, isHorizontal and 1 or 1 - Multiplier, -2)
-                    Items.AmmobarFade.Position = dim2(isHorizontal and Multiplier or 0, 1, 0, 1)
-                    
-                    Items.AmmobarText.Text = IsGun and CurrentAmmo .. "/".. AmmoPerMag or "N/A"
-                    Items.AmmobarText.Position = dim2(isHorizontal and Multiplier or 0, isHorizontal and -(Items.AmmobarText.TextBounds.X / 2) or 0, isHorizontal and 0 or 1 - Multiplier, 0)
-                    --Items.AmmobarText.TextColor3 = Color_2
-                end 
-            end)
-
             Data.RefreshDescendants = LPH_NO_VIRTUALIZE(function() 
                 local Character = (typechar and player) or player.Character or player.CharacterAdded:Wait()
                 local Humanoid = Character:FindFirstChild("Humanoid") or Character:WaitForChild( "Humanoid" )
@@ -5106,15 +3012,9 @@ local Options, MiscOptions do
 
                 Data:Connection(Humanoid.HealthChanged, Data.HealthChanged)
                 Data:Connection(Character.ChildAdded, Data.ToolAdded)
-                Data:Connection(Character.ChildAdded, function(v)
-                    task.wait(0.1)
-                    Data.AmmoChanged(v)
-                end)
                 Data:Connection(Character.ChildRemoved, Data.ToolAdded)
-                Data:Connection(Character.ChildRemoved, Data.AmmoChanged)
 
                 Data.ToolAdded(Character:FindFirstChildOfClass("Tool"))
-                Data.AmmoChanged(Character:FindFirstChildOfClass("Tool"))
                 Data.HealthChanged(Data.Info.Humanoid.Health)
             end)
 
@@ -5183,31 +3083,6 @@ local Options, MiscOptions do
                     end
 
                     Parent.Parent = Items[HealthHolder]
-                end)    
-
-                Data:Connection(Parent.ChildRemoved, function()
-                    task.wait(.1)
-                    if #Parent:GetChildren() == 0 then
-                        if Parent.Parent == nil then 
-                            return 
-                        end 
-
-                        Parent.Parent = Esp.Cache
-                    end 
-                end)
-            end 
-
-            for _,AmmoHolder in {"Right", "Left"} do
-                local Parent = Items["AmmobarTexts" .. AmmoHolder]
-
-                Data:Connection(Parent.ChildAdded, function()
-                    task.wait(.1)
-
-                    if Parent.Parent == nil then 
-                        return 
-                    end
-
-                    Parent.Parent = Items[AmmoHolder]
                 end)    
 
                 Data:Connection(Parent.ChildRemoved, function()
@@ -5498,98 +3373,6 @@ local Options, MiscOptions do
                         Items.HealthbarText.FontFace = ESPFonts[value]
                     end
                 -- 
-
-                -- Ammo Bar
-                    if key == "Ammobar" then 
-                        if Items.Ammobar.Parent == nil then 
-                            continue
-                        end 
-
-                        Items.Ammobar.Parent = value and Items[Items.Ammobar.Name] or Esp.Cache  
-                        Items.AmmobarText.Parent = (Items.AmmobarText.Parent ~= Esp.Cache and value) and Items["AmmobarTexts" .. Items.Ammobar.Name] or Esp.Cache  
-                    end 
-
-                    if key == "Ammobar_Position" then 
-                        local isEnabled = not (Items.Ammobar.Parent == Esp.Cache)
-
-                        if Items.Ammobar.Parent == nil then 
-                            return 
-                        end 
-
-                        Items.Ammobar.Parent = isEnabled and Items[value] or Esp.Cache
-                        Items.Ammobar.Name = value -- This is super gay
-                        Items.AmmobarText.Parent = isEnabled and value and Items.AmmobarText.Parent ~= Esp.Cache and Items["AmmobarTexts" .. Items.Ammobar.Name] or Esp.Cache
-
-                        if value == "Bottom" or value == "Top" then 
-                            Items.AmmobarGradient.Rotation = 0 
-                        else 
-                            Items.AmmobarGradient.Rotation = 90
-                        end 
-
-                        if Data.Info.Character then
-                            Data.AmmoChanged(Data.Info.Character:FindFirstChild("Tool"))
-                        end
-                    end 
-                    
-                    if key == "Ammobar_Number" then  
-                        if Items.Ammobar.Parent == Esp.Cache then 
-                            continue
-                        end 
-
-                        local Parent = Items["AmmobarTexts" .. Items.Ammobar.Name]
-                        
-                        Items.AmmobarText.Parent = value and Parent or Esp.Cache
-                    end
-
-                    if key == "Ammobar_Low" then 
-                        local Color = rgbseq{
-                            Items.AmmobarGradient.Color.Keypoints[1], 
-                            Items.AmmobarGradient.Color.Keypoints[2], 
-                            rgbkey(1, value.Color)
-                        }
-
-                        Items.AmmobarGradient.Color = Color
-                    end 
-
-                    if key == "Ammobar_Medium" then 
-                        local Color = rgbseq{
-                            Items.AmmobarGradient.Color.Keypoints[1], 
-                            rgbkey(0.5, value.Color), 
-                            Items.AmmobarGradient.Color.Keypoints[3]
-                        }
-
-                        Items.AmmobarGradient.Color = Color
-                    end
-
-                    if key == "Ammobar_High" then 
-                        local Color = rgbseq{
-                            rgbkey(0, value.Color), 
-                            Items.AmmobarGradient.Color.Keypoints[2], 
-                            Items.AmmobarGradient.Color.Keypoints[3]
-                        }
-
-                        Items.AmmobarGradient.Color = Color
-                    end
-
-                    if key == "Ammobar_Thickness" then 
-                        local Bar = Items.Ammobar
-                        local isHorizontal = Bar.Parent == Items.Bottom or Bar.Parent == Items.Top
-
-                        Bar.Size = dim2(0, value + 2, 0, value + 2)
-                    end
-
-                    if key == "Ammobar_Text_Size" then 
-                        Items.AmmobarText.TextSize = value
-                    end
-
-                    if key == "Ammobar_Text_Color" then 
-                        Items.AmmobarText.TextColor3 = value
-                    end
-
-                    if key == "Ammobar_Font" then 
-                        Items.AmmobarText.FontFace = ESPFonts[value]
-                    end
-                --
                 
                 -- Texts
                     local Text;
@@ -5647,7 +3430,7 @@ local Options, MiscOptions do
                     end 
                 -- 
             end 
-        end);  
+        end); 
         
         function Esp.Unload() 
             for _,player in Players:GetPlayers() do 
@@ -5699,16 +3482,17 @@ local Options, MiscOptions do
     end
 end
 
--- beware of somewhat horrible code
 do -- Library
     -- Services
-    local Players = cloneref(game:GetService("Players"))
-    local UserInputService = cloneref(game:GetService("UserInputService"))
-    local HttpService = cloneref(game:GetService("HttpService"))
-    local TweenService = cloneref(game:GetService("TweenService"))
-    local RunService = cloneref(game:GetService("RunService"))
-    local Workspace = cloneref(game:GetService("Workspace"))
-    
+    local Players = game:GetService("Players")
+    local UserInputService = game:GetService("UserInputService")
+    local HttpService = game:GetService("HttpService")
+    local TweenService = game:GetService("TweenService")
+    local RunService = game:GetService("RunService")
+    local Workspace = game:GetService("Workspace")
+    local SoundService = cloneref and cloneref(game:GetService("SoundService")) or game:GetService("SoundService")
+    local CoreGui = cloneref and cloneref(game:GetService("CoreGui")) or game:GetService("CoreGui")
+
     -- Variables
     local LocalPlayer = Players.LocalPlayer
     local Camera = Workspace.CurrentCamera
@@ -5758,7 +3542,11 @@ do -- Library
 
     local RectNew = Rect.new
 
-    local IsMobile = UserInputService.TouchEnabled and (not UserInputService.KeyboardEnabled) or false
+    local IsMobile = UserInputService.TouchEnabled or false
+
+    gethui = gethui or function()
+        return CoreGui
+    end
 
     getgenv().Options = { }
 
@@ -5777,7 +3565,7 @@ do -- Library
 
         Folders = {
             Directory = "valary",
-            Configs = "valary/SouthBronxConfigs",
+            Configs = "valary/TheBronx3Configs",
             Assets = "valary/Assets",
             Themes = "valary/Themes"
         },
@@ -5822,11 +3610,6 @@ do -- Library
             ["DataLossPrevention"] = {"DataLossPrevention.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/DataLossPrevention.png?raw=true"},
             ["CarGear"] = {"CarGear.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/CarGear.png?raw=true"},
             ["Groups"] = {"Groups.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/Groups.png?raw=true"},
-            ["FolderEye"] = {"FolderEye.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/FolderEye.png?raw=true"},
-            ["ZonePersonUrgent"] = {"ZonePersonUrgent.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/ZonePersonUrgent.png?raw=true"},
-            ["HourglassEmpty"] = {"HourglassEmpty.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/HourglassEmpty.png?raw=true"},
-            ["Bomb"] = {"Bomb.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/Bomb.png?raw=true"},
-            ["Cyclone"] = {"Cyclone.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/Cyclone.png?raw=true"},
             ["GlobePublic"] = {"GlobePublic.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/GlobePublic.png?raw=true"},
             ["LightBulb"] = {"LightBulb.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/LightBulb.png?raw=true"},
             ["Cloud"] = {"Cloud.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/Cloud.png?raw=true"},
@@ -5836,10 +3619,8 @@ do -- Library
             ["ScreenRotation"] = {"ScreenRotation.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/ScreenRotation.png?raw=true"},
             ["QueryStats"] = {"QueryStats.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/QueryStats.png?raw=true"},
             ["CellTower"] = {"CellTower.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/CellTower.png?raw=true"},
-            ["Battery"] = {"Battery.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/Battery.png?raw=true"},
+            ["Bomb"] = {"Bomb.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/Bomb.png?raw=true"},
             ["Servers"] = {"Servers.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/Servers.png?raw=true"},
-            ["ShoppingCart"] = {"ShoppingCart.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/ShoppingCart.png?raw=true"},
-            ["expand-arrows"] = {"expand-arrows.png", "https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/expand-arrows.png?raw=true"},
         },
 
         Friendly_Players = {}, Priority_Players = {}, Selected_Player = nil,
@@ -6020,11 +3801,10 @@ do -- Library
                 [Property] = Visibility and OldTransparency or 1
             }, true)
 
-            local Connection; Connection = Library:Connect(NewTween.Tween.Completed, function()
+            Library:Connect(NewTween.Tween.Completed, function()
                 if not Visibility then 
                     task.wait()
                     Item[Property] = OldTransparency
-                    Connection["Connection"]:Disconnect(); Connection = nil
                 end
             end)
 
@@ -6456,19 +4236,6 @@ do -- Library
     end
 
     local Themes = {
-        ["Old Default"] = {
-            ["Background"] = FromRGB(16, 18, 21),
-            ["Inline"] = FromRGB(22, 25, 29),
-            ["Shadow"] = FromRGB(0, 0, 0),
-            ["Text"] = FromRGB(255, 255, 255),
-            ["Image"] = FromRGB(255, 255, 255),
-            ["Dark Gradient"] = FromRGB(211, 211, 211),
-            ["Inactive Text"] = FromRGB(185, 185, 185),
-            ["Element"] = FromRGB(34, 39, 45),
-            ["Accent"] = FromRGB(196, 231, 255),
-            ["Border"] = FromRGB(32, 36, 42)
-        },
-
         ["Preset"] = {
             ["Background"] = FromRGB(14, 14, 16),       -- Darker background
             ["Inline"] = FromRGB(22, 22, 24),           -- Slightly lighter inline panels
@@ -6487,7 +4254,7 @@ do -- Library
             ["Inline"] = FromRGB(30, 30, 30),          -- from #1e1e1e
             ["Shadow"] = FromRGB(20, 20, 20),          -- from #141414
             ["Text"] = FromRGB(255, 255, 255),         -- from #ffffff
-            ["Image"] = FromRGB(255, 255, 255),         -- from #7e48a3
+            ["Image"] = FromRGB(255,255,255),         -- from #7e48a3
             ["Dark Gradient"] = FromRGB(195, 195, 195),-- from #c3c3c3
             ["Inactive Text"] = FromRGB(180, 180, 180),-- from #b4b4b4
             ["Element"] = FromRGB(52, 52, 52),         -- from #343434
@@ -6573,7 +4340,7 @@ do -- Library
     end
 
     Library.Holder = Instances:Create("ScreenGui", {
-        Parent = gethui(),
+        Parent = game:GetService("CoreGui"),
         Name = "\0",
         ZIndexBehavior = Enum.ZIndexBehavior.Global,
         DisplayOrder = 2,
@@ -7568,16 +5335,26 @@ do -- Library
                     Selected = false,
                     Name = Option,
                     Text = OptionText,
+                    RealName = Option,
                     Button = OptionButton,
                     Check = CheckImage
                 }
 
-                local RealOptionIndex
+                local DoesItAlreadyExists
 
-                if Dropdown.Options[OptionData.Name] then 
-                    RealOptionIndex = OptionData.Name.." "..#Dropdown.Options
-                else
-                    RealOptionIndex = OptionData.Name
+                local ChildrenCount = 0
+                
+                for Index, Value in Items["Holder"].Instance:GetChildren() do
+                    if Value:IsA("TextButton") then
+                        ChildrenCount = ChildrenCount + 1
+                    end
+                end
+
+                if Dropdown.Options[Option] then 
+                    DoesItAlreadyExists = true
+                    local NewName = Option .. " " .. ChildrenCount
+                    OptionData.Name = NewName
+                    --OptionText.Instance.Text = NewName
                 end
 
                 function OptionData:Toggle(Status)
@@ -7596,12 +5373,12 @@ do -- Library
                     OptionData.Selected = not OptionData.Selected
 
                     if Data.Multi then 
-                        local Index = TableFind(Dropdown.Value, OptionData.Name)
+                        local Index = TableFind(Dropdown.Value, OptionData.RealName)
 
                         if Index then 
                             TableRemove(Dropdown.Value, Index)
                         else
-                            TableInsert(Dropdown.Value, OptionData.Name)
+                            TableInsert(Dropdown.Value, OptionData.RealName)
                         end
 
                         Library.Flags[Dropdown.Flag] = Dropdown.Value
@@ -7613,8 +5390,8 @@ do -- Library
                         Items["Value"].Instance.Text = TextFormat
                     else
                         if OptionData.Selected then 
-                            Dropdown.Value = OptionData.Name
-                            Library.Flags[Dropdown.Flag] = OptionData.Name
+                            Dropdown.Value = OptionData.RealName
+                            Library.Flags[Dropdown.Flag] = OptionData.RealName
 
                             OptionData:Toggle("Active")
 
@@ -7625,7 +5402,7 @@ do -- Library
                                 end
                             end
 
-                            Items["Value"].Instance.Text = OptionData.Name 
+                            Items["Value"].Instance.Text = OptionData.RealName 
                         else
                             Dropdown.Value = nil
                             Library.Flags[Dropdown.Flag] = nil
@@ -7644,7 +5421,7 @@ do -- Library
                     OptionData:Set()
                 end)
 
-                Dropdown.Options[RealOptionIndex] = OptionData
+                Dropdown.Options[OptionData.Name] = OptionData
                 return OptionData
             end
 
@@ -7769,7 +5546,7 @@ do -- Library
                     return
                 end
 
-                SearchStepped = RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function()
+                SearchStepped = RunService.RenderStepped:Connect(function()
                     for Index, Value in Dropdown.Options do 
                         if StringFind(Value.Name:lower(), Items["Input"].Instance.Text:lower()) then 
                             Value.Button.Instance.Visible = true
@@ -7777,7 +5554,7 @@ do -- Library
                             Value.Button.Instance.Visible = false
                         end
                     end
-                end))
+                end)
             end)
 
             Items["Input"]:Connect("FocusLost", function()
@@ -9786,6 +7563,7 @@ do -- Library
 
             Library:Connect(UserInputService.InputBegan, function(Input, Typing)
                 if Typing then return end
+
                 if tostring(Input.KeyCode) == Keybind.Key or tostring(Input.UserInputType) == Keybind.Key and not Keybind.Value == "None" then
                     if Keybind.Mode == "toggle" then 
                         Keybind:Press()
@@ -9810,7 +7588,7 @@ do -- Library
             Library:Connect(UserInputService.InputEnded, function(Input, Typing)
                 if Typing then return end
 
-                if tostring(Input.KeyCode) == Keybind.Key or tostring(Input.UserInputType) == Keybind.Key and not Keybind.Value == "None" then
+                if tostring(Input.KeyCode) == Keybind.Key or tostring(Input.UserInputType) == Keybind.Key and not Keybind.Value == "None"  then
                     if Keybind.Mode == "hold" then 
                         Keybind:Press(false)
                     end
@@ -10148,7 +7926,7 @@ do -- Library
                     });
 
                         Items.BoxHolder = Instances:Create( "Frame" , {
-                            Visible = false;
+                            Visible = true;
                             Size = UDim2New(1, -2, 1, -2);
                             BorderColor3 = FromRGB(0, 0, 0);
                             Parent = Items.Box.Instance;
@@ -10239,7 +8017,7 @@ do -- Library
                     });
 
                     Items.HealthBarText = Instances:Create( "TextLabel" , {
-                        FontFace = ESPFonts["Verdana"];
+                        FontFace = ESPFonts["ProggyClean"];
                         Parent = Items.HealthBar.Instance;
                         TextColor3 = FromRGB(0, 255, 0);
                         Text = "100";
@@ -10252,7 +8030,7 @@ do -- Library
                         TextXAlignment = Enum.TextXAlignment.Left;
                         BorderColor3 = FromRGB(0, 0, 0);
                         ZIndex = 2;
-                        TextSize = 11;
+                        TextSize = 12;
                     })
 
                     Instances:Create( "UIStroke", {
@@ -10262,7 +8040,7 @@ do -- Library
 
                 -- Name
                         Items.Name = Instances:Create( "TextLabel" , {
-                            FontFace = ESPFonts["Verdana"];
+                            FontFace = ESPFonts["ProggyClean"];
                             Parent = Items.TopTexts.Instance;
                             TextColor3 = FromRGB(255, 255, 255);
                             TextStrokeColor3 = FromRGB(255, 255, 255);
@@ -10276,7 +8054,7 @@ do -- Library
                             TextXAlignment = Enum.TextXAlignment.Center;
                             BorderColor3 = FromRGB(0, 0, 0);
                             ZIndex = 2;
-                            TextSize = 11;
+                            TextSize = 12;
                         });
 
                         Instances:Create( "UIStroke", {
@@ -10285,7 +8063,7 @@ do -- Library
                         });
 
                         Items.WeaponText = Instances:Create( "TextLabel" , {
-                            FontFace = ESPFonts["Verdana"];
+                            FontFace = ESPFonts["ProggyClean"];
                             Parent = Items.RightTexts.Instance;
                             TextColor3 = FromRGB(255, 255, 255);
                             TextStrokeColor3 = FromRGB(255, 255, 255);
@@ -10298,7 +8076,7 @@ do -- Library
                             TextXAlignment = Enum.TextXAlignment.Center;
                             BorderColor3 = FromRGB(0, 0, 0);
                             ZIndex = 2;
-                            TextSize = 11;
+                            TextSize = 12;
                         });
 
                         Instances:Create( "UIStroke", {
@@ -10307,7 +8085,7 @@ do -- Library
                         });
 
                         Items.Distance = Instances:Create( "TextLabel" , {
-                            FontFace = ESPFonts["Verdana"];
+                            FontFace = ESPFonts["ProggyClean"];
                             Parent = Items.BottomTexts.Instance;
                             TextColor3 = FromRGB(255, 255, 255);
                             TextStrokeColor3 = FromRGB(255, 255, 255);
@@ -10320,7 +8098,7 @@ do -- Library
                             TextXAlignment = Enum.TextXAlignment.Center;
                             BorderColor3 = FromRGB(0, 0, 0);
                             ZIndex = 2;
-                            TextSize = 11;
+                            TextSize = 12;
                         });
 
                         Instances:Create( "UIStroke", {
@@ -10593,7 +8371,6 @@ do -- Library
                 LocalCharacter.Archivable = true
                 ViewportModel = LocalCharacter:Clone()
 
-                --ViewportModel.chatpart:Destroy()
                 ViewportModel.PrimaryPart.Anchored = true
                 ViewportModel.Parent = Items["CharacterViewport"].Instance
 
@@ -11278,12 +9055,8 @@ do -- Library
                 Description = Data.Description or Data.description or "Description",
                 Duration = Data.Duration or Data.duration or 5,
                 Icon = Data.Icon or Data.icon or "9080568477801",
-                IconColor = Data.IconColor ~= nil and (type(Data.IconColor) == "table" and Data.IconColor.Start or type(Data.IconColor) == "userdata" and Data.IconColor) or Color3.new(1,1,1),
+                IconColor = Data.IconColor or Data.iconcolor or FromRGB(255, 255, 255),
             }
-
-            if type(Notification.Icon) == "string" and not string.find(Notification.Icon, not Volcano and ".png" or "rbxasset://") then
-                Notification.Icon = "rbxassetid://"..Notification.Icon
-            end
 
             local Items = { } do
                 Items["Notification"] = Instances:Create("Frame", {
@@ -12490,7 +10263,7 @@ do -- Library
                     Items["Icon"]:Tween(nil, {ImageColor3 = Library.Theme.Image, ImageTransparency = 0.5}) 
                 end
 
-                local Descendants = Items["PageContent"].Instance:GetChildren()
+                local Descendants = Items["PageContent"].Instance:GetDescendants()
                 TableInsert(Descendants, Items["PageContent"].Instance)
 
                 local NewTween
@@ -12519,6 +10292,12 @@ do -- Library
             Items["Inactive"]:Connect("MouseButton1Down", LPH_NO_VIRTUALIZE(function()
                 for Index, Value in Page.Window.Pages do
                     Value:Switch(Value == Page)
+                end
+
+                if Page.SubPages then
+                    --[[for Index, Value in Page.SubPages do
+                        Value:Switch(Value == SubPage)
+                    end]]
                 end
             end))
 
@@ -13895,10 +11674,6 @@ do -- Library
                 Items["Button"].Instance.Visible = Bool
             end
 
-            function Button:SetText(Text)
-                Items["Text"].Instance.Text = Text
-            end
-
             local SearchData = {
                 Name = Button.Name,
                 Item = Items["Button"]
@@ -14198,7 +11973,7 @@ do -- Library
             return Dropdown
         end
 
-        Library.Sections.Label = function(self, Text, Big, Alignment, Tooltip)
+        Library.Sections.Label = function(self, Text, Alignment, Tooltip)
             local Label = {
                 Window = self.Window,
                 Page = self.Page,
@@ -14224,61 +11999,32 @@ do -- Library
                 }) 
 
                 Items["Label"]:Tooltip(Tooltip)
-                if Big == true then
-                    Items["Text"] = Instances:Create("TextLabel", {
-                        Parent = Items["Label"].Instance,
-                        FontFace = Library.Font,
-                        TextColor3 = FromRGB(255, 255, 255),
-                        BorderColor3 = FromRGB(0, 0, 0),
-                        ZIndex = 2,
-                        Text = Label.Name,
-                        Name = "\0",
-                        AnchorPoint = Vector2New(0, 0), -- 🔥 top-left anchor
-                        Position = UDim2New(0, 0, 0, 0), -- 🔥 start from top-left
-                        Size = UDim2New(1, -16, 0, 0), -- 🔥 auto height
-                        AutomaticSize = Enum.AutomaticSize.Y,
-                        TextWrapped = true,
-                        RichText = true,
-                        BackgroundTransparency = 1,
-                        TextXAlignment = Enum.TextXAlignment[Label.Alignment],
-                        TextYAlignment = Enum.TextYAlignment.Top, -- 🔥 aligns multi-line text nicely
-                        BorderSizePixel = 0,
-                        TextSize = 14,
-                        BackgroundColor3 = FromRGB(255, 255, 255)
-                    })
-                    Items["Text"]:AddToTheme({TextColor3 = "Text"})
-                else
-                    Items["Text"] = Instances:Create("TextLabel", {
-                        Parent = Items["Label"].Instance,
-                        RichText = true,
-                        FontFace = Library.Font,
-                        TextColor3 = FromRGB(255, 255, 255),
-                        BorderColor3 = FromRGB(0, 0, 0),
-                        ZIndex = 2,
-                        Text = Label.Name,
-                        Name = "\0",
-                        AnchorPoint = Vector2New(0, 0.5),
-                        Size = UDim2New(1, -16, 0, 15),
-                        TextWrapped = true,
-                        AutomaticSize = Enum.AutomaticSize.Y,
-                        BackgroundTransparency = 1,
-                        TextXAlignment = Enum.TextXAlignment[Label.Alignment],
-                        Position = UDim2New(0, 0, 0.5, 0),
-                        BorderSizePixel = 0,
-                        TextSize = 14,
-                        BackgroundColor3 = FromRGB(255, 255, 255)
-                    })
 
-                    Items["Text"]:AddToTheme({
-                        TextColor3 = "Text"
-                    })
-                end
+                Items["Text"] = Instances:Create("TextLabel", {
+                    Parent = Items["Label"].Instance,
+                    FontFace = Library.Font,
+                    TextColor3 = FromRGB(255, 255, 255),
+                    BorderColor3 = FromRGB(0, 0, 0),
+                    ZIndex = 2,
+                    Text = Label.Name,
+                    Name = "\0",
+                    AnchorPoint = Vector2New(0, 0.5),
+                    Size = UDim2New(1, -16, 0, 15),
+                    TextWrapped = true,
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    BackgroundTransparency = 1,
+                    TextXAlignment = Enum.TextXAlignment[Label.Alignment],
+                    Position = UDim2New(0, 0, 0.5, 0),
+                    BorderSizePixel = 0,
+                    TextSize = 14,
+                    BackgroundColor3 = FromRGB(255, 255, 255)
+                })  Items["Text"]:AddToTheme({TextColor3 = "Text"})
 
                 Instances:Create("UIPadding", {
                     Parent = Items["Label"].Instance,
                     Name = "\0",
-                    PaddingTop = UDimNew(0, string.find(Label.Name, "'exempt' teleport") and 12 or 9),
-                    PaddingBottom = UDimNew(0, string.find(Label.Name, "'exempt' teleport") and 12 or 9),
+                    PaddingTop = UDimNew(0, 8),
+                    PaddingBottom = UDimNew(0, 8),
                 })
 
                 Items["SubElements"] = Instances:Create("Frame", {
@@ -14565,7 +12311,7 @@ do -- Library
         if AutoloadConfig ~= "" then
             local Success, Result = Library:LoadConfig(AutoloadConfig)
 
-            if Success then     
+            if Success then 
                 Library:Notification({
                     Name = "Success",
                     Description = "Successfully loaded autoload config",
@@ -14612,7 +12358,7 @@ end
 do
     Window = Library:Window({
         Name = '<font color="rgb(255,255,255)">valary.</font><font color="rgb(236,23,23)">gg</font> | '..Game_Name_MarketPlaceService,
-        Version = "v1.1.0",
+        Version = "v1.0.0",
         Logo = "135215559087473",
         FadeSpeed = 0.25,
         --Size = UDim2.new(0, 659, 0, 511)
@@ -14663,7 +12409,7 @@ do
     local Special_DiscordIDS = {
         ["1096603799159832636"] = ' - <font color="#EC1717">Owner</font>'
     }
-
+    
     if not isfolder("valary/Assets/Profiles") then
         makefolder("valary/Assets/Profiles")
     end
@@ -14783,18 +12529,14 @@ do
                         })
                     end
 
-                    for i, v in pairs(Messages.users.stored) do
-                        if v.usernames then
-                            for _, username in ipairs(v.usernames) do
-                                pcall(function()
-                                    local decoded_user = base64.decode(string.reverse(username))
+                    for i,v in Messages.users.stored do
+                        pcall(function()
+                            local decoded_user = base64.decode(string.reverse(v.username))
 
-                                    if not Config.NVX_Users[decoded_user] then
-                                        Config.NVX_Users[decoded_user] = i
-                                    end
-                                end)
+                            if not Config.NVX_Users[decoded_user] then
+                                Config.NVX_Users[decoded_user] = i
                             end
-                        end
+                        end)
                     end
 
                     local toRemove = {}
@@ -14881,12 +12623,12 @@ do
                 end)
 
                 if not Success then
-                    --warn("GLOBAL CHAT ERROR :",Error)
+                    warn("GLOBAL CHAT ERROR :",Error)
                 end
             end
         end))
     end)
-    
+
     Watermark = Library:Watermark("This is a watermark", "135215559087473")
     Watermark:SetVisibility(false)
     local KeybindList = Library:KeybindsList()
@@ -14973,14 +12715,14 @@ do
                 do
                     Field_OfView_Section:Toggle({Name="Use Field Of View",Flag="FieldOfView_Enabled",Default=false,Callback=function(State) Config.TargetSelector.UseFOV=State end})
 
-                    Field_OfView_Section:Slider({Name="Field Of View Radius",Flag="FieldOfView_Radius",Default=25, Suffix = "°", Min=0,Max=100,Decimals=1,Callback=function(State)
+                    Field_OfView_Section:Slider({Name="Field Of View Radius",Flag="FieldOfView_Radius",Default=25,Min=0,Max=100,Decimals=1,Callback=function(State)
                         Config.FieldOfView.Radius=State*10
                         FieldOfView.Radius=State*10
                         FieldOfViewOutline.Radius=State*10
                         FieldOfViewFill.Radius=State*10
                     end})
 
-                    Field_OfView_Section:Slider({Name="Field Of View Sides",Flag="FieldOfView_Sides", Suffix = "°", Default=50,Min=3,Max=100,Callback=function(State)
+                    Field_OfView_Section:Slider({Name="Field Of View Sides",Flag="FieldOfView_Sides",Default=50,Min=3,Max=100,Callback=function(State)
                         FieldOfView.NumSides=State
                         FieldOfViewOutline.NumSides=State
                         FieldOfViewFill.NumSides=State
@@ -15017,13 +12759,13 @@ do
                     
                     TargetSelector_Section:Label("Select Player Keybind","Left"):Keybind({Name="Select Player",Flag="selectplayerbind",Default=Enum.KeyCode.Q,Mode="toggle",Callback=function(State) Config.TargetSelector.Targetting=State end})
 
-                    TargetSelector_Section:Toggle({Name="Health Check",Flag="Target_Health_Check",Default=false,Callback=function(value) Config.TargetSelector.HealthCheck=value end})
+                    TargetSelector_Section:Toggle({Name="Health Check",Flag="Target_Health_Check", Default=false,Callback=function(value) Config.TargetSelector.HealthCheck=value end})
 
                     TargetSelector_Section:Slider({Name="Minimum Health",Flag="Target_Minimum_Health",Default=5,Min=0,Max=100,Decimals=1,Suffix="%",Callback=function(value) Config.TargetSelector.Health=value end})
 
                     TargetSelector_Section:Toggle({Name="Distance Check",Flag="Target_Distance_Check",Default=false,Callback=function(value) Config.TargetSelector.LimitDistance=value end})
 
-                    TargetSelector_Section:Slider({Name="Maximum Distance",Flag="Target_Max_Distance",Default=350,Min=0,Max=350,Decimals=1,Suffix="m",Callback=function(value) Config.TargetSelector.MaxDistance=value end})
+                    TargetSelector_Section:Slider({Name="Maximum Distance",Flag="Target_Max_Distance",Default=500,Min=0,Max=2000,Decimals=1,Suffix="m",Callback=function(value) Config.TargetSelector.MaxDistance=value end})
 
                     TargetSelector_Section:Toggle({Name="Visible Check",Flag="Target_Visible_Check",Default=false,Callback=function(value) Config.TargetSelector.VisibleCheck=value end})
 
@@ -15040,9 +12782,9 @@ do
                     Config.Silent.Enabled = State
                 end})
                             
-                --[[SilentAim_Section:Toggle({Name = "Wall Bang", Flag = "SilentAim_Wallbang", Default = false, Callback = function(State)
+                SilentAim_Section:Toggle({Name = "Wall Bang", Flag = "SilentAim_Wallbang", Default = false, Callback = function(State)
                     Config.Silent.WallBang = State
-                end})]]
+                end})
 
                 SilentAim_Section:Slider({Name="Silent Aim Hit Chance",Suffix = "%",Flag="SilentAim_HitChance",Default=100,Min=0,Max=100,Callback=function(State)
                     Config.Silent.HitChance = State
@@ -15087,15 +12829,15 @@ do
 
                 table.sort(Sound_Names)
 
-                HitSound_Section:Toggle({Name = "Enabled", Flag = "SouthBronx/Silent/HitSoundsEnabled", Callback = function(State)
+                HitSound_Section:Toggle({Name = "Enabled", Flag = "ThaBronx3/Silent/HitSoundsEnabled", Callback = function(State)
                     Config.Hit_Sounds_Settings.Enabled = State
                 end})
 
-                HitSound_Section:Toggle({Name = "Hide Normal Gun Sound", Tooltip = "If enabled, this will make the normal gunshot sound silent.", Flag = "SouthBronx/Silent/HideNormalGunSound", Callback = function(State)
+                HitSound_Section:Toggle({Name = "Hide Normal Gun Sound", Tooltip = "If enabled, this will make the normal gunshot sound silent.", Flag = "ThaBronx3/Silent/HideNormalGunSound", Callback = function(State)
                     Config.Hit_Sounds_Settings.HideNormalSounds = State
                 end})
 
-                HitSound_Section:Dropdown({Name = "Select Sound", Items = Sound_Names, MaxSize = 175, Default = "Neverlose", Flag = "SouthBronx/Silent/SelectHitSound", Callback = function(State)
+                HitSound_Section:Dropdown({Name = "Select Sound", Items = Sound_Names, MaxSize = 175, Default = "Neverlose", Flag = "ThaBronx3/Silent/SelectHitSound", Callback = function(State)
                     if Config.Hit_Sounds[State] then
                         Config.Hit_Sounds_Settings.Selected = State
 
@@ -15112,127 +12854,33 @@ do
                     end
                 end})
 
-                HitSound_Section:Slider({Name = "Select Volume", Flag = "SouthBronx/Silent/SelectVolume", Max = 10, Min = 1, Default = 5, Decimals = 1, Callback = function(State)
+                HitSound_Section:Slider({Name = "Select Volume", Flag = "ThaBronx3/Silent/SelectVolume", Max = 10, Min = 1, Default = 5, Decimals = 1, Callback = function(State)
                     Config.Hit_Sounds_Settings.Volume = State
-                end})
-
-                local HitBoxExpander_Section = Subpages["Aimbot"]:Section({Name = "Head Hit-Box Expanders", Icon = Library:GetImage("expand-arrows"), Side = 1})
-
-                HitBoxExpander_Section:Toggle({Name = "Enabled", Flag = "SouthBronx/HitBoxes/Enabled", Default = false, Callback = function(State)
-                    Config.Hitbox_Expander.Enabled = State
-                end})
-
-                HitBoxExpander_Section:Toggle({Name = "Safe-Zone Check", Flag = "SouthBronx/HitBoxes/Safe-ZoneCheck", Default = false, Callback = function(State)
-                    Config.Hitbox_Expander.SafeZoneCheck = State
-                end})
-
-                HitBoxExpander_Section:Slider({Name = "Multiplier", Flag = "SouthBronx/HitBoxes/Multiplier", Max = 50, Min = 1, Default = 5, Suffix = "x", Callback = function(State)
-                    Config.Hitbox_Expander.Multiplier = State
-                end})
-
-                HitBoxExpander_Section = Subpages["Aimbot"]:Section({Name = "Hit-Box Customization", Icon = "103863157706913", Side = 2})
-
-                HitBoxExpander_Section:Label("Hit-Box Color"):Colorpicker({
-                    Name = "Hit-Box Color",
-                    Flag = "SouthBronx/HitBoxes/Color",
-                    Default = Color3.new(1,1,1),
-                    Alpha = 0,
-                    Callback = function(Value)
-                        Config.Hitbox_Expander.Color = Value
-                    end
-                })
-
-                HitBoxExpander_Section:Slider({Name = "Hit-Box Transparency", Flag = "SouthBronx/HitBoxes/Transparency", Min = 0, Max = 100, Default = 75, Suffix = "%", Callback = function(State)
-                    Config.Hitbox_Expander.Transparency = State/100
                 end})
             end
 
             do -- Modifications
-                local Section_Ok = Subpages["Weapon_Mods"]:Section({Name = "Modification Information", Icon = Library:GetImage("Info"), Side = 1})
-                
-                Section_Ok:Label("Beware of modifications that have warnings, they can be detected by the server!", "Left")
-
                 local Weapon_Modifications_Enabled = Subpages["Weapon_Mods"]:Section({Name = "Weapon Modifications", Icon = Library:GetImage("Wrench"), Side = 1})
 
-                --[[Weapon_Modifications_Enabled:Toggle({Name='Infinite Ammo ⚠', Color = Color3.fromRGB(255,255,60), Flag="InfiniteAmmo_Enabled",Default=false,Callback=function(State) 
-                    Config["Infinite Ammo"].Enabled = State
+                local Modifications = {
+                    "Infinite Ammo";
+                    "Infinite Clips";
+                    "Infinite Damage";
+                    "Instant Reload";
+                    "Instant Equip";
+                    "Fully Automatic";
+                    "Disable Jamming";
+                    "Modify Recoil Value";
+                    "Modify Spread Value";
+                    "Modify Fire Rate";
+                }
 
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})]]
-
-                Weapon_Modifications_Enabled:Toggle({Name='Instant Bullet', Flag="InstantBullet_Enabled",Default=false,Callback=function(State) 
-                    Config["Instant Bullet"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})
-
-                Weapon_Modifications_Enabled:Toggle({Name='Instant Reload', Flag="InstantReload_Enabled",Default=false,Callback=function(State) 
-                    Config["Instant Reload"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})
-
-                Weapon_Modifications_Enabled:Toggle({Name='Instant Equip', Flag="InstantEquip_Enabled",Default=false,Callback=function(State) 
-                    Config["Instant Equip"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})
-
-                --[[Weapon_Modifications_Enabled:Toggle({Name='Instant Kill ⚠', Color = Color3.fromRGB(255,255,60), Flag="InstantKill_Enabled",Default=false,Callback=function(State) 
-                    Config["One Tap"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})]]
-
-                Weapon_Modifications_Enabled:Toggle({Name='Automatic Mode', Flag="Automatic_Mode_Enabled",Default=false,Callback=function(State) 
-                    Config["Force Auto"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})
-
-                Weapon_Modifications_Enabled:Toggle({Name='Modify Fire Rate ⚠', Color = Color3.fromRGB(255,255,60), Flag="IncreaseFire-Rate_Enabled",Default=false,Callback=function(State) 
-                    Config["Fire_Rate"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})
-
-                Weapon_Modifications_Enabled:Toggle({Name='Modify Recoil', Flag="ModifyRecoil_Enabled",Default=false,Callback=function(State) 
-                    Config["Recoil"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})
-
-                Weapon_Modifications_Enabled:Toggle({Name='Modify Spread', Flag="ModifySpread_Enabled",Default=false,Callback=function(State) 
-                    Config["Spread"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})
-
-                Weapon_Modifications_Enabled:Toggle({Name='No Jamming', Flag="NoJamming_Enabled",Default=false,Callback=function(State) 
-                    Config["No Jam"].Enabled = State
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                        Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                    end
-                end})
+                for _, Index in Modifications do
+                    Weapon_Modifications_Enabled:Toggle({Name = Index, Flag = 'TheBronx3/WeaponModifications/'..Index, Default = false, Callback = function(State)
+                        if Index == "Fully Automatic" then Index = "Automatic" end
+                        Config.The_Bronx.Modifications[Index:gsub(" ", "")] = State
+                    end})
+                end
 
                 Weapon_Modifications_Enabled = Subpages["Weapon_Mods"]:Section({Name = "Weapon Modification Settings", Icon = Library:GetImage("MultipleCogs"), Side = 2})
 
@@ -15242,16 +12890,12 @@ do
                     Name = "Fire-Rate Percentage",
                     Default = 50,
                     Max = 100,
-                    Min = 15,
+                    Minimum = 1,
                     Decimals = 1,
                     Suffix = "%",
                     Flag = "Fire_Rate_Percentage",
                     Callback = function(Value)
-                        Config.Fire_Rate.Increase = Value
-
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                            Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                        end
+                        Config.The_Bronx.Modifications.FireRateSpeed = Value
                     end
                 })
 
@@ -15259,16 +12903,12 @@ do
                     Name = "Spread Percentage",
                     Default = 50,
                     Max = 100,
-                    Min = 0,
+                    Minimum = 1,
                     Decimals = 1,
                     Suffix = "%",
                     Flag = "Spread_Percentage",
                     Callback = function(Value)
-                        Config.Spread.Reduce = Value
-
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                            Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                        end
+                        Config.The_Bronx.Modifications.SpreadPercentage = Value
                     end
                 })
 
@@ -15276,67 +12916,33 @@ do
                     Name = "Recoil Percentage",
                     Default = 50,
                     Max = 100,
-                    Min = 0,
+                    Minimum = 1,
                     Decimals = 1,
                     Suffix = "%",
                     Flag = "Recoil_Percentage",
                     Callback = function(Value)
-                        Config.Recoil.Reduce = Value
-
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Setting") then
-                            Config.Modify(LocalPlayer.Character:FindFirstChildOfClass("Tool"))
-                        end
+                        Config.The_Bronx.Modifications.RecoilPercentage = Value
                     end
                 })
 
-                --[[Weapon_Modifications_Enabled = Subpages["Weapon_Mods"]:Section({Name = "Kill Aura Settings", Icon = Library:GetImage("Skull"), Side = 2})
+                Weapon_Modifications_Enabled = Subpages["Weapon_Mods"]:Section({Name = "Kill Aura Settings", Icon = Library:GetImage("Skull"), Side = 2})
 
-                KillAura_Toggle = Weapon_Modifications_Enabled:Toggle({Name='Enabled - Hold Gun ⚠', Color = Color3.fromRGB(255,255,60), Flag="KillAura_Enabled",Default=false,Callback=function(State) 
-                    Config.South_Bronx.KillAura.Enabled = State
+                Weapon_Modifications_Enabled:Toggle({Name='Enabled - Need Gun', Flag="KillAura_Enabled",Tooltip = "You need to hold the gun for this to work.",Default=false,Callback=function(State) 
+                    Config.The_Bronx.KillAura = State
                 end})
 
-                KillAura_Range = Weapon_Modifications_Enabled:Slider({
+                Weapon_Modifications_Enabled:Slider({
                     Name = "Kill Aura Range",
-                    Default = 375,
-                    Max = 375,
+                    Default = 500,
+                    Max = 2000,
                     Minimum = 1,
                     Decimals = 1,
                     Suffix = "m",
                     Flag = "Kill_Aura_Range",
                     Callback = function(Value)
-                        Config.South_Bronx.KillAura.Range = Value
+                        Config.The_Bronx.KillAuraRange = Value
                     end
                 })
-
-                -- Infinite Ammo Loop
-                local Index = 0
-                    RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function() 
-                        local Character = LocalPlayer.Character
-                        local Tool = Character and Character:FindFirstChildOfClass("Tool")
-
-                        if Character and Tool and Tool:FindFirstChild("Setting") then
-                            if Config["Infinite Ammo"].Enabled and Index >= 3 then
-                                ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("RPC"):FireServer(buffer.fromstring("\003"), Tool)
-                                Index=0
-                            end
-
-                            Index+=1
-
-                            local ModuleSettings = require(Tool.Setting)
-
-                            local Mag_Val = ModuleSettings.AmmoPerMag
-
-                            local Max_Ammo = math.clamp(Mag_Val*2, 0, 50)
-
-                            if Tool:FindFirstChild("Ammo") and Tool:FindFirstChild("Mag") and Mag_Val then
-                                if Config["Infinite Ammo"].Enabled then
-                                    Tool.Ammo.Value = Max_Ammo
-                                    Tool.Mag.Value = Mag_Val
-                                end
-                            end
-                        end
-                    end))
-                --]]
             end
         end
 
@@ -16126,13 +13732,13 @@ do
 
             local Ambient_Section = Subpages["World"]:Section({Name = "Ambient Utilities", Side = 1, Icon = Library:GetImage("Cloud")})
 
-            Ambient_Section:Toggle({Name = "Enabled", Flag = "SouthBronx/Visuals/Ambient/Enabled", Callback = function(State)
+            Ambient_Section:Toggle({Name = "Enabled", Flag = "ThaBronx3/Visuals/Ambient/Enabled", Callback = function(State)
                 Config.WorldVisuals.AmbientEnabled = State
             end})
 
             Ambient_Section:Label("Color"):Colorpicker({
                 Name = "Ambient Color",
-                Flag = "SouthBronx/Visuals/Ambient/Color",
+                Flag = "ThaBronx3/Visuals/Ambient/Color",
                 Default = Color3.fromRGB(255, 255, 255),
                 Alpha = 0,
                 Callback = function(Value)
@@ -16142,13 +13748,13 @@ do
 
             local Saturation_Section = Subpages["World"]:Section({Name = "Saturation Utilities", Side = 1, Icon = Library:GetImage("Contrast")})
 
-            Saturation_Section:Toggle({Name = "Enabled", Flag = "SouthBronx/Visuals/Saturation/Enabled", Callback = function(State)
+            Saturation_Section:Toggle({Name = "Enabled", Flag = "ThaBronx3/Visuals/Saturation/Enabled", Callback = function(State)
                 Config.WorldVisuals.SaturationEnabled = State
             end})
             
             Saturation_Section:Slider({
                 Name = "Saturation Increase Value",
-                Flag = "SouthBronx/Visuals/Saturation/Value",
+                Flag = "ThaBronx3/Visuals/Saturation/Value",
                 Max = 200,
                 Min = 0,
                 Default = 50,
@@ -16161,13 +13767,13 @@ do
     
             local FieldOfView_Section = Subpages["World"]:Section({Name = "Field Of View Utilities", Side = 1, Icon = Library:GetImage("EyeTracking")})
 
-            FieldOfView_Section:Toggle({Name = "Enabled", Flag = "SouthBronx/Visuals/FieldOfView/Enabled", Callback = function(State)
+            FieldOfView_Section:Toggle({Name = "Enabled", Flag = "ThaBronx3/Visuals/FieldOfView/Enabled", Callback = function(State)
                 Config.WorldVisuals.FieldOfViewEnabled = State
             end})
             
             FieldOfView_Section:Slider({
                 Name = "Field Of View Value",
-                Flag = "SouthBronx/Visuals/FieldOfView/Value",
+                Flag = "ThaBronx3/Visuals/FieldOfView/Value",
                 Max = 120,
                 Min = 0,
                 Default = 70,
@@ -16180,7 +13786,7 @@ do
 
             local Tracers_Section = Subpages["World"]:Section({Name = "Tracer Utilities", Side = 2, Icon = Library:GetImage("TrailShort")})
 
-            Tracers_Section:Toggle({Name = "Enabled", Flag = "SouthBronx/Tracers/Enabled", Callback = function(State)
+            Tracers_Section:Toggle({Name = "Enabled", Flag = "ThaBronx3/Tracers/Enabled", Callback = function(State)
                 Config.Tracers.Enabled = State
             end})
 
@@ -16189,7 +13795,7 @@ do
             Tracer_Label:Colorpicker({
                 Name = "Start Color",
                 Flag = "Visuals/Tracers/Color1",
-                Default = Color3.fromRGB(255, 85, 0),
+                Default = Color3.fromRGB(236,23,23),
                 Alpha = 0,
                 Callback = function(Value)
                     Config.Tracers.StartColor = Value
@@ -16219,13 +13825,13 @@ do
                 end
             })
 
-            Tracers_Section:Toggle({Name = "Rainbow", Flag = "SouthBronx/Tracers/Rainbow", Callback = function(State)
+            Tracers_Section:Toggle({Name = "Rainbow", Flag = "ThaBronx3/Tracers/Rainbow", Callback = function(State)
                 Config.Tracers.Rainbow = State
             end})
 
             local Stretched_Res_Section = Subpages["World"]:Section({Name = "Stretched Resolution Utilities", Side = 2, Icon = Library:GetImage("ScreenRotation")})
 
-            Stretched_Res_Section:Toggle({Name = "Enabled", Flag = "SouthBronx/Stretch/Enabled", Tooltip = "This will mess with south bronx's aiming system.", Callback = function(State)
+            Stretched_Res_Section:Toggle({Name = "Enabled", Flag = "ThaBronx3/Stretch/Enabled", Tooltip = "This will mess with tha bronx 3's aiming system.", Callback = function(State)
                 Config.WorldVisuals.StretchEnabled = State
             end})
 
@@ -16244,7 +13850,7 @@ do
 
             local Fullbright_Section = Subpages["World"]:Section({Name = "Fullbright Utilities", Side = 2, Icon = Library:GetImage("LightBulb")})
 
-            Fullbright_Section:Toggle({Name = "Enabled", Flag = "SouthBronx/Fullbright/Enabled", Callback = function(State)
+            Fullbright_Section:Toggle({Name = "Enabled", Flag = "ThaBronx3/Fullbright/Enabled", Callback = function(State)
                 Config.WorldVisuals.Fullbright = State
             end})
         end
@@ -16252,7 +13858,7 @@ do
         do -- Main
             local Subpages = {
                 ["Player"] = Pages["Main"]:SubPage({
-                    Name = "Player", 
+                    Name = "Local Player", 
                     Icon = Library:GetImage("AccountCircle"), 
                     Columns = 2
                 }),
@@ -16279,1253 +13885,1239 @@ do
             }
 
             do -- Player
-                do -- Teleportation
-                    local Teleportation_Utilites_Section = Subpages.Teleports:Section({Name = "Teleportation Utilities", Icon = Library:GetImage("JumpToElement"), Side = 1})
+                local LocalPlayer_Modification_Section = Subpages["Player"]:Section({Name = "Local Player Modifications", Icon = Library:GetImage("NewController30px"), Side = 1})
 
-                    Teleportation_Utilites_Section:Dropdown({Name = "Select Location", Items = Location_Name, MaxSize = 200, Flag = "Select_Location_Teleport", Multi = false})
+                local __Modifications = {
+                    "Infinite Sleep";
+                    "Infinite Hunger";
+                    "Infinite Stamina";
+                    "Instant Interact";
+                    "Instant Revive";
+                    "Auto Pickup Cash";
+                    "Auto Pickup Bags";
+                    "Disable Camera Bobbing";
+                    --"Disable Cameras";
+                    "Disable Blood Effects";
+                    "Bypass Locked Cars";
+                    "No Jump Cooldown";
+                    "No Rent Pay";
+                    "No Fall Damage";
+                    "No Knockback";
+                    "Faster Respawn";
+                    "Respawn Where You Died";
+                }
 
-                    Teleportation_Utilites_Section:Button({Name = "Teleport To Selected Location", Callback = function()
-                        if not Library.Flags.Select_Location_Teleport then return end
-
-                        if Library.Flags.Select_Location_Teleport ~= "Dirty Hobo 💩" and Library.Flags.Select_Location_Teleport ~= "Active ATM 🏧" and Library.Flags.Select_Location_Teleport ~= "Personal Apartment 🏠" and Library.Flags.Select_Location_Teleport ~= "Robbable Vehicle 🚗" then
-                            Config:Teleport(Locations[Library.Flags.Select_Location_Teleport])
-                        elseif Library.Flags.Select_Location_Teleport == "Robbable Vehicle 🚗" then
-                            local Robbable_Vehicle = Config.GetRobbableVehicle()
-
-                            if not Robbable_Vehicle then
-                                return Library:Notification({
-                                    Name = "Valary.gg | Teleportation",
-                                    Description = "Couldn't find robbable vehicle!",
-                                    Duration = 7.5
-                                })
-                            end
-                            
-                            if Robbable_Vehicle then
-                                Config:Teleport(Robbable_Vehicle.WindowBreak.CFrame)
-                            end
-                        elseif Library.Flags.Select_Location_Teleport == "Personal Apartment 🏠" then
-                            local Apartment = Config.GetPersonalApartment()
-
-                            if not Apartment then
-                                return Library:Notification({
-                                    Name = "Valary.gg | Teleportation",
-                                    Description = "Couldn't find your apartment!",
-                                    Duration = 7.5
-                                })
-                            end
-
-                            if Apartment then
-                                Config:Teleport(Apartment.Board.backboard.CFrame)
-                            end
-                        elseif Library.Flags.Select_Location_Teleport == "Dirty Hobo 💩" then
-                            local _Hobo = Config.GetHobo()
-                            if not _Hobo then
-                                return Library:Notification({
-                                    Name = "Valary.gg | Teleportation",
-                                    Description = "Couldn't find a hobo!",
-                                    Duration = 7.5
-                                })
-                            end
-                            Config:Teleport(_Hobo.HumanoidRootPart.CFrame)
-                        elseif Library.Flags.Select_Location_Teleport == "Active ATM 🏧" then
-                            local ATMPositions = {
-                                ATM1 = CFrame.new(-30, 4, -300);
-                                ATM2 = CFrame.new(539, 4, -353);
-                                ATM3 = CFrame.new(497, 4, 403);
-                                ATM4 = CFrame.new(236, 4, -158);
-                                ATM5 = CFrame.new(525, -8, -92);
-                                ATM6 = CFrame.new(-450, 4, 370);
-                                ATM7 = CFrame.new(-266, 4, -209);
-                                ATM8 = CFrame.new(-11, 4, 231);
-                                ATM9 = CFrame.new(717, 4, 410);
-                                ATM10 = CFrame.new(-532, 3, -21);
-                                ATM11 = CFrame.new(-646, 4, 155);
-                                ATM12 = CFrame.new(698, 3, -241);
-                                ATM13 = CFrame.new(-315, 4, 142);
-                                ATM14 = CFrame.new(-378, 4, -365);
-                                ATM15 = CFrame.new(360, 4, -364);
-                                ATM16 = CFrame.new(870, 3, -346);
-                                ATM17 = CFrame.new(904, 3, -99);
-                                ATM18 = CFrame.new(1095, 3, 178);
-                                ATM19 = CFrame.new(1054, 4, 585);
-                                ATM20 = CFrame.new(895, 4, 142);
-                                ATM21 = CFrame.new(1021, 3, -229);
-                            };
-
-                            local ATM;
-
-                            for Index, Value in Workspace.Map.ATMS:GetChildren() do
-                                if Value.ATMScreen.Transparency == 0 then
-                                    ATM = Value
-                                    break
-                                end
-                            end
-
-                            Config:Teleport(ATMPositions[tostring(ATM)])
+                for _, Index in __Modifications do
+                    LocalPlayer_Modification_Section:Toggle({
+                        Name = Index,
+                        Flag = "TheBronx3/LocalPlayerModifications/"..Index,
+                        Default = false,
+                        Callback = function(Value)
+                            Config.The_Bronx.PlayerModifications[Index:gsub(" ", "")] = Value
                         end
-                    end})
-                end
-
-                do -- Purchasing
-                    local Purchasing_Utilites_Section = Subpages.Teleports:Section({Name = "Purchasing Utilities", Icon = Library:GetImage("CreditCard"), Side = 2})
-
-                    Purchasing_Utilites_Section:Dropdown({Name = "Select Item", Items = Config.South_Bronx.Guns, MaxSize = 200, Flag = "Select_Item_To_Buy", Multi = false})
-                
-                    Purchasing_Utilites_Section:Slider({
-                        Name = "Amount To Purchase",
-                        Flag = "Amount_To_Purchase",
-                        Max = 30,
-                        Min = 1,
-                        Default = 1,
-                        Suffix = "",
-                        Decimals = 1
                     })
-
-                    Purchasing_Utilites_Section:Button({Name = "Purchase Selected Item", Callback = function()
-                        if not Library.Flags.Select_Item_To_Buy then return end
-
-                        local self = string.match(Library.Flags.Select_Item_To_Buy, "^(.*) %-");
-
-                        local DidntBuy = false
-                            
-                        local Success, Error = pcall(function()
-                            self = self:match("^%s*(.-)%s*$");
-
-                            local PromptCFrame = Gun_Locations[self];
-                            local OldCFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
-
-                            local ChildAdded_Check; ChildAdded_Check = LocalPlayer.Backpack.ChildAdded:Connect(function(Child)
-                                if Child.Name == self then
-                                    ItemReceieved = true
-                                    DidntBuy = false
-
-                                    ChildAdded_Check:Disconnect();
-                                end
-                            end)
-
-                            Config:Teleport(PromptCFrame)
-
-                            task.wait(1.5)
-
-                            task.delay(3, function()
-                                if not ItemReceieved then
-                                    ItemReceieved = true
-                                    DidntBuy = true
-                                end
-                            end)
-
-                            for Index = 1, Library.Flags.Amount_To_Purchase do
-                                fireproximityprompt(Workspace.Folders:FindFirstChild("PromptPurchases")[self].proxprompt:FindFirstChildOfClass("ProximityPrompt"))
-                            end
-
-                            repeat RunService.RenderStepped:Wait() until ItemReceieved == true
-
-                            task.wait(0.5)
-
-                            Config:Teleport(OldCFrame)
-                        end)
-
-                        if not LocalPlayer.Backpack:FindFirstChild(self) and not LocalPlayer.Character:FindFirstChild(self) then
-                            Library:Notification({
-                                Name = "Valary.gg | Bug",
-                                Description = string.format("Failed to purchase item %s", self),
-                                Duration = 7.5
-                            })
-
-                            return
-                        end
-
-                        if DidntBuy then
-                            if Success then
-                                Library:Notification({
-                                    Name = "Valary.gg | Bug",
-                                    Description = string.format("Failed to purchase item %s", self),
-                                    Duration = 7.5
-                                })
-                            else
-                                Library:Notification({
-                                    Name = "Valary.gg | Error",
-                                    Description = string.format("Failed to purchase item %s . error : %s", self, Error),
-                                    Duration = 10
-                                })
-                            end
-                        else
-                            if Library.Flags.Amount_To_Purchase > 1 then
-                                self..="s"
-                            end
-
-                            Library:Notification({
-                                Name = "Valary.gg | Purchasing",
-                                Description = string.format('Successfully purchased %s %s!', tostring(Library.Flags.Amount_To_Purchase), self),
-                                Duration = 5
-                            })
-                        end
-                    end})
                 end
 
-                do -- Apartment Teleports
-                    local Apartment_Teleports_Section = Subpages.Teleports:Section({Name = "Apartment Teleports", Icon = Library:GetImage("Apartment"), Side = 2})
+                local UI_Modification_Section = Subpages["Player"]:Section({Name = "User Interface Utilities", Icon = Library:GetImage("IdCard"), Side = 2})
+                
+                local _UINames, BlacklistedNames = {'ATM GUI'}, {"Dead", "Settings1", "Controls", "FirstShopGUI", "Freecam", "ThaShop2", "WATCH GUI", "NYPD Cars", "CONSTRUCTION LEVEL", "RobPlayerUI", "Bronx LOCKER", 'MobileBeam', 'Settings', 'Flash', 'Enter', 'CopSirens'}
 
-                    local SelectApartment_Dropdown = Apartment_Teleports_Section:Dropdown({Name = "Select Apartment", Flag = "Select_Apartment_Teleport", Items = {}, Multi = false, MaxSize = 150})
+                for Index, Value in LocalPlayer.PlayerGui:GetChildren() do
+                    if Value:IsA("ScreenGui") and not Value.Enabled then
+                        if table.find(BlacklistedNames, Value.Name) then continue end
+                        table.insert(_UINames, Value.Name)
+                    end
+                end 
 
-                    Apartment_Teleports_Section:Button({Name = "Teleport To Selected Apartment", Callback = function()
-                        if not Library.Flags.Select_Apartment_Teleport then
-                            return
+                UI_Modification_Section:Dropdown({Name = "Select Interface", Items = _UINames, Flag = "TheBronx3/UserInterfaces/Value", MaxSize = 175, Multi = false})
+
+                ToggleInterface_Toggle = nil;
+                ToggleInterface_Toggle = UI_Modification_Section:Toggle({Name = "Toggle Interface", Flag = "TheBronx3/UserInterfaces/Enabled", Default = false, Callback = LPH_NO_VIRTUALIZE(function(State)
+                    if not Library.Flags["TheBronx3/UserInterfaces/Value"] then return end
+
+                    if Library.Flags["TheBronx3/UserInterfaces/Value"] == "ATM GUI" then
+                        local SelectedUI = LocalPlayer.PlayerGui:FindFirstChild("ATMGui")
+
+                        if not SelectedUI and State then
+                            local _Clone = Lighting.Assets.GUI.ATMGui:Clone()
+                            _Clone.Parent = LocalPlayer.PlayerGui
+                            SelectedUI = _Clone
+                            _Clone.Frame.closeBtn.MouseButton1Click:Connect(function()
+                                ToggleInterface_Toggle:Set(false)
+                                --_Clone:Destroy()
+                            end)
                         end
 
-                        for Index, Value in Workspace.Map.APTS:GetChildren() do
-                            if Value.Board.name.SurfaceGui.TextLabel.Text == tostring(Library.Flags.Select_Apartment_Teleport:gsub("'s Apartment", "")) then
-                                Config:Teleport(Value.Board.backboard.CFrame)
-
-                                break
-                            end
-                        end
-                    end})
-
-                    --[[Apartment_Teleports_Section:Button({Name = "Refresh List", Callback = function()
-                        local Apartments = {}
-
-                        for Index, Value in Workspace.Map.APTS:GetChildren() do
-                            if Value.Board.name.SurfaceGui.TextLabel.Text ~= "VACANT" then
-                                table.insert(Apartments, Value.Board.name.SurfaceGui.TextLabel.Text.."'s Apartment")
-                            end
+                        if not State and SelectedUI then
+                            SelectedUI:Destroy()
                         end
 
-                        SelectApartment_Dropdown:Refresh(Apartments)
-                    end})]]
+                        local Old_UI_Value = Library.Flags["TheBronx3/UserInterfaces/Value"]
 
-                    do -- Refresh
-                        local Apartments = {}
+                        repeat task.wait() until Library.Flags["TheBronx3/UserInterfaces/Value"] ~= Old_UI_Value
 
-                        for Index, Value in Workspace.Map.APTS:GetChildren() do
-                            if Value.Board.name.SurfaceGui.TextLabel.Text ~= "VACANT" then
-                                table.insert(Apartments, Value.Board.name.SurfaceGui.TextLabel.Text.."'s Apartment")
-                            end
+                        if SelectedUI then
+                            SelectedUI:Destroy()
                         end
 
-                        SelectApartment_Dropdown:Refresh(Apartments)
+                        if ToggleInterface_Toggle then
+                            ToggleInterface_Toggle:Set(false)
+                        end
 
-                        for Index, Value in Workspace.Map.APTS:GetChildren() do
-                            Value.Board.name.SurfaceGui.TextLabel:GetPropertyChangedSignal("Text"):Connect(LPH_NO_VIRTUALIZE(function()
-                                task.wait(.1)
-                                
-                                local Apartments = {}
+                        return
+                    end
 
-                                for Index, Value in Workspace.Map.APTS:GetChildren() do
-                                    if Value.Board.name.SurfaceGui.TextLabel.Text ~= "VACANT" then
-                                        table.insert(Apartments, Value.Board.name.SurfaceGui.TextLabel.Text.."'s Apartment")
-                                    end
-                                end
+                    local SelectedUI = LocalPlayer.PlayerGui:FindFirstChild(Library.Flags["TheBronx3/UserInterfaces/Value"])
 
-                                SelectApartment_Dropdown:Refresh(Apartments)
+                    if SelectedUI then
+                        SelectedUI.Enabled = State
+
+                        local Old_UI_Value = Library.Flags["TheBronx3/UserInterfaces/Value"]
+
+                        repeat RunService.Heartbeat:Wait() until Library.Flags["TheBronx3/UserInterfaces/Value"] ~= Old_UI_Value or not SelectedUI.Enabled or not LocalPlayer.PlayerGui:FindFirstChild(Old_UI_Value)
+
+                        SelectedUI.Enabled = false
+                        if ToggleInterface_Toggle then
+                            ToggleInterface_Toggle:Set(false)
+                        end
+                    end 
+                end)})
+
+                local LocalCharacter_Modification_Section = Subpages["Player"]:Section({Name = "Local Character Modifications", Icon = Library:GetImage("PlayerUtilties"), Side = 2})
+
+                local Connection_1, Connection_2 = nil, nil
+
+                local SpeedBind = nil;
+                local SpeedToggle = LocalCharacter_Modification_Section:Toggle({Name = "Modify WalkSpeed", Flag = "ModifyWalkSpeed/TheBronx", Default = false, Callback = function(State)
+                    Config.MiscSettings.ModifySpeed.Enabled = State
+
+                    if State then
+                        if not Connection_1 then
+                            Connection_1 = RunService.PreSimulation:Connect(LPH_JIT_MAX(function()
+                                RootPart.Anchored = false;
                             end))
                         end
+
+                        if not Connection_2 then
+                            Connection_2 = RunService.PostSimulation:Connect(LPH_JIT_MAX(function()
+                                RootPart.Anchored = true;
+                            end))
+                        end
+                    else
+                        task.delay(1.5, function()
+                            RootPart.Anchored = false;
+
+                            if Connection_1 then
+                                Connection_1:Disconnect()
+                                Connection_1 = nil
+                            end
+
+                            if Connection_2 then
+                                Connection_2:Disconnect()
+                                Connection_2 = nil
+                            end
+
+                            RootPart.Anchored = false;
+                        end)
                     end
-                end
 
-                do -- Waypoint Teleports
-                    if not isfolder("valary/Waypoints") then
-                        makefolder("valary/Waypoints")
+                    if State and SpeedBind and SpeedBind.Toggled == false then
+                        SpeedBind:Press(true)
                     end
 
-                    Config.ToVector3 = LPH_NO_VIRTUALIZE(function(Self, String)                    
-                        local axes = {}
-                    
-                        for axis in String:gmatch('[^'..','..']+') do
-                            axes[#axes + 1] = axis
+                    if not State and SpeedBind and SpeedBind.Toggled == true then
+                        SpeedBind:Press(false)
+                    end
+                end})
+
+                SpeedBind = SpeedToggle:Keybind({Name = "Modify WalkSpeed", Flag="SpeedBind",Default=Enum.KeyCode.X,Mode="toggle",Callback=function(State)
+                    SpeedToggle:Set(State)
+                end})
+
+                LocalCharacter_Modification_Section:Toggle({Name = "Modify JumpPower", Flag = "ModifyJumpPower/TheBronx", Default = false, Callback = function(State)
+                    Config.MiscSettings.ModifyJump.Enabled = State
+                end})
+
+                LocalCharacter_Modification_Section:Toggle({Name = "Click Teleport Enabled", Flag = "ClickTeleportEnabled/TheBronx", Default = false, Callback = function(State)
+                    Config.MiscSettings.ClickTeleport_Enabled = State
+                end})
+
+                local Actively_NoClipping = false;
+                local _NoClipBind = nil;
+                local _NoClipToggle = LocalCharacter_Modification_Section:Toggle({Name = "No-Clip", Flag = "No_Clip", Default = false, Callback = function(State)
+                    if State and _NoClipBind and _NoClipBind.Toggled == false then
+                        _NoClipBind:Press(true)
+                    end
+
+                    if not State and _NoClipBind and _NoClipBind.Toggled == true then
+                        _NoClipBind:Press(false)
+                    end
+
+                    if State then
+                        if not Actively_NoClipping then
+                            Actively_NoClipping = true
+                            RunService:BindToRenderStep("No_Clip", 400, LPH_NO_VIRTUALIZE(function()
+                                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                                    if LocalPlayer.Character.Humanoid.Health ~= 0 then
+                                        for Index, Value in LocalPlayer.Character:GetDescendants() do
+                                            if Player_Collide_Data[Value.Name] then
+                                                pcall(function()
+                                                    Value.CanCollide = false
+                                                end)
+                                            end
+                                        end
+                                    else
+                                        for Index, Value in LocalPlayer.Character:GetDescendants() do
+                                            if Player_Collide_Data[Value.Name] then
+                                                pcall(function()
+                                                    Value.CanCollide = true
+                                                end)
+                                            end
+                                        end
+                                    end
+                                end
+                            end))
                         end
-                    
-                        return Vector3.new(axes[1], axes[2], axes[3])
-                    end)
+                    else
+                        RunService:UnbindFromRenderStep("No_Clip")
+                        Actively_NoClipping = false
 
-                    local WayPoint_Teleport_Section = Subpages.Teleports:Section({Name = "Waypoint Teleports", Icon = Library:GetImage("Cyclone"), Side = 1})
-
-                    local WaypointDropdown = WayPoint_Teleport_Section:Dropdown({Name = "Select Waypoint", Items = {}, MaxSize = 165, Flag = "SouthBronx/SelectWaypoint"})
-                    WayPoint_Teleport_Section:Textbox({Name = "Waypoint Name", Placeholder = "type here...", Flag = "SouthBronx/WaypointName"})
-
-                    WayPoint_Teleport_Section:Button({Name = "Go-To Waypoint", Callback = function()
-                        if Library.Flags['SouthBronx/SelectWaypoint'] then
-                            if readfile("valary/Waypoints/"..Library.Flags['SouthBronx/SelectWaypoint']..".txt") then
-                                Config:Teleport(CFrame.new( Config:ToVector3( readfile("valary/Waypoints/"..Library.Flags['SouthBronx/SelectWaypoint']..".txt") ) ))
+                        for Index, Value in LocalPlayer.Character:GetDescendants() do
+                            if Player_Collide_Data[Value.Name] then
+                                pcall(function()
+                                    Value.CanCollide = true
+                                end)
                             end
                         end
-                    end})
+                    end
+                end})
+                
+                _NoClipBind = _NoClipToggle:Keybind({Name = "No-Clip", Flag="NoClipBind",Default=Enum.KeyCode.N,Mode="toggle",Callback=function(State)
+                    _NoClipToggle:Set(State)
+                end})
 
-                    WayPoint_Teleport_Section:Button({Name = "Save Waypoint", Tooltip = "Stand wherever you want the waypoint to be.", Callback = function()
-                        if Library.Flags["SouthBronx/WaypointName"] and Library.Flags["SouthBronx/WaypointName"] ~= "" then
-                            writefile("valary/Waypoints/"..Library.Flags["SouthBronx/WaypointName"]..".txt", tostring(LocalPlayer.Character.HumanoidRootPart.CFrame))
+                LocalCharacter_Modification_Section = Subpages["Player"]:Section({Name = "Local Character Modification Settings", Icon = Library:GetImage("Tune"), Side = 2})
+
+                local ClickKeyLabel = LocalCharacter_Modification_Section:Label("Click Teleport Key")
+
+                local Key; Key = ClickKeyLabel:Keybind({Name = "Click Teleport Bind", Flag="ClickTeleport_Bind",Default=Enum.KeyCode.LeftControl,Mode="hold",Callback=function(State)
+                    if Key then 
+                        Config.MiscSettings.ClickTeleport_Key = Enum.KeyCode[tostring(select(2, Key:Get()):gsub("Enum.KeyCode.", ""))]
+                    end
+                end})
+
+                LocalCharacter_Modification_Section:Slider({
+                    Name = "WalkSpeed Value",
+                    Flag = "TheBronx3/WalkSpeedValue",
+                    Default = 50,
+                    Min = 16,
+                    Max = 150,
+                    Decimals = 1,
+                    Callback = function(Value)
+                        Config.MiscSettings.ModifySpeed.Value = Value
+                    end
+                })
+
+                LocalCharacter_Modification_Section:Slider({
+                    Name = "JumpPower Value",
+                    Flag = "TheBronx3/JumpPowerValue",
+                    Default = 7,
+                    Min = 0,
+                    Max = 100,
+                    Decimals = 1,
+                    Callback = function(Value)
+                        Config.MiscSettings.ModifyJump.Value = Value
+                    end
+                })
+            end
+
+            do -- Other Players
+                do -- Player Info
+                    local Format_Money = LPH_NO_VIRTUALIZE(function(amount)
+                        local formatted = tostring(amount)
+                        local k
+                        while true do  
+                            formatted, k = formatted:gsub("^(-?%d+)(%d%d%d)", '%1,%2')
+                            if k == 0 then break end
                         end
-                    end})
-
-                    WayPoint_Teleport_Section:Button({Name = "Delete Waypoint", Callback = function()
-                        if Library.Flags['SouthBronx/SelectWaypoint'] then
-                            if readfile("valary/Waypoints/"..Library.Flags['SouthBronx/SelectWaypoint']..".txt") then
-                                delfile("valary/Waypoints/"..Library.Flags['SouthBronx/SelectWaypoint']..".txt")
-                            end
-                        end
-                    end})
-
-                    Config.RefreshWaypoints = LPH_NO_VIRTUALIZE(function()
-                        local files = listfiles("valary/Waypoints")
-
-                        local names = {}
-
-                        for _, file in ipairs(files) do
-                            local name = file:match("([^/\\]+)%.txt$")
-
-                            if file then
-                                table.insert(names, name)
-                            end
-                        end
-
-                        WaypointDropdown:Refresh(names)
-                    end)
-
-                    Config:RefreshWaypoints()
-
-                    task.spawn(LPH_NO_VIRTUALIZE(function()
-                        local lastFiles = {}
-
-                        while task.wait(0.1) do
-                            local files = listfiles("valary/Waypoints")
-
-                            if #files ~= #lastFiles then
-                                Config:RefreshWaypoints()
-                            end
-
-                            lastFiles = files
-                        end
-                    end))
-                end
-
-                do -- Other Players
-                    local Get_Children_String = LPH_NO_VIRTUALIZE(function(Object, Type)
-                        local _table = {}
-
-                        for Index, Value in Object:GetChildren() do
-                            if not Type then
-                                table.insert(_table, Value.Name)
-                            else
-                                if not Value:IsA(Type) then continue end
-
-                                table.insert(_table, Value.Name)
-                            end
-                        end
-
-                        table.sort(_table)
-
-                        return _table
+                        return "$" .. formatted
                     end)
 
                     local SelectedPlayer_Section = Subpages["Players"]:Section({Name = "Selected Player Info", Icon = Library:GetImage("DataLossPrevention"), Side = 2})
                     
                     local NameLabel = SelectedPlayer_Section:Label("Selected Player : None")
-                    --local UserId_Label = SelectedPlayer_Section:Label("User Id : None")
-                    local Inventory_Label = SelectedPlayer_Section:Label("Inventory : N/A", true)
+                    local UserId_Label = SelectedPlayer_Section:Label("User Id : None")
+                    local CleanMoney_Label = SelectedPlayer_Section:Label("Clean Money : None")
+                    local DirtyMoney_Label = SelectedPlayer_Section:Label("Dirty Money : None")
 
                     task.spawn(LPH_NO_VIRTUALIZE(function()
                         while task.wait(.1) do
                             if Library.Selected_Player then
                                 NameLabel:SetText(string.format("Selected Player : @%s", Library.Selected_Player.Name))
-                                --UserId_Label:SetText(string.format("User Id : %s", Library.Selected_Player.UserId))
-
-                                if Library.Selected_Player:FindFirstChild("Backpack") then
-                                    local Items = Get_Children_String(Library.Selected_Player:FindFirstChild("Backpack"), "Tool")
-
-                                    if Items then
-                                        Inventory_Label:SetText(string.format("Inventory : %s", table.concat(Items, ", ")))
-                                    else
-                                        Inventory_Label:SetText("Inventory : N/A")
-                                    end
-                                else
-                                    Inventory_Label:SetText("Inventory : N/A")
-                                end
+                                UserId_Label:SetText(string.format("User Id : %s", Library.Selected_Player.UserId))
                             else
                                 NameLabel:SetText("Selected Player : None")
-                                --UserId_Label:SetText("User Id : None")
-                                Inventory_Label:SetText("Inventory : N/A")
+                                UserId_Label:SetText("User Id : None")
+                            end
+
+                            if Library.Selected_Player and Library.Selected_Player:FindFirstChild("stored") and Library.Selected_Player:FindFirstChild("stored"):FindFirstChild("Money") and Library.Selected_Player:FindFirstChild("stored"):FindFirstChild("FilthyStack") then
+                                CleanMoney_Label:SetText("Clean Money : "..Format_Money(Library.Selected_Player:FindFirstChild("stored"):FindFirstChild("Money").Value))
+                                DirtyMoney_Label:SetText("Dirty Money : "..Format_Money(Library.Selected_Player:FindFirstChild("stored"):FindFirstChild("FilthyStack").Value))
+                            else
+                                CleanMoney_Label:SetText("Clean Money : None")
+                                DirtyMoney_Label:SetText("Dirty Money : None")
                             end
                         end
                     end))
+                end
 
+                do -- Player Options
                     local SelectedPlayer_Section = Subpages["Players"]:Section({Name = "Selected Player Utilities", Icon = Library:GetImage("IdentityPlatform"), Side = 1})
 
-                    SelectedPlayer_Section:Button({Name = "Teleport To Selected Player", Callback = function()
-                        if Library.Selected_Player and Library.Selected_Player.Character and Library.Selected_Player.Character:FindFirstChild("HumanoidRootPart") then
-                            Config:Teleport(Library.Selected_Player.Character:FindFirstChild("HumanoidRootPart").CFrame)
+                    SelectedPlayer_Section:Toggle({
+                        Name = "Spectate Player",
+                        Flag = "SpectatePlayer/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.PlayerUtilities.SpectatePlayer = State
                         end
-                    end})
+                    })
 
-                    SelectedPlayer_Section:Button({Name = "Teleport To Selected Player's Vehicle", Callback = function()
-                        if Library.Selected_Player and Workspace:FindFirstChild(string.format("%s's Car", Library.Selected_Player.Name)) then
-                            local Car = Workspace:FindFirstChild(string.format("%s's Car", Library.Selected_Player.Name))
-                            
-                            if not Car:FindFirstChildWhichIsA("Part", true) then
-                                return Library:Notification({
-                                    Name = "Valary.gg | Teleportation",
-                                    Description = "Car could not be teleported to!",
-                                    Duration = 7.5,
-                                    Icon = "97118059177470",
-                                    IconColor = Color3.fromRGB(255, 120, 120)
-                                })
+                    SelectedPlayer_Section:Toggle({
+                        Name = "Bring Player",
+                        Flag = "BringPlayer/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.PlayerUtilities.BringingPlayer = State
+                        end
+                    })
+
+                    SelectedPlayer_Section:Toggle({
+                        Name = "Bug / Kill Player - Car",
+                        Flag = "BugPlayer/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.PlayerUtilities.BugPlayer = State
+                        end
+                    })
+
+                    SelectedPlayer_Section:Toggle({
+                        Name = "Auto Kill Player - Gun",
+                        Flag = "AutoKillPlayer/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.PlayerUtilities.AutoKill = State
+                        end
+                    })
+
+                    SelectedPlayer_Section:Toggle({
+                        Name = "Auto Ragdoll Player - Gun",
+                        Flag = "AutoRagdollPlayer/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.PlayerUtilities.AutoRagdoll = State
+                        end
+                    })
+
+                    SelectedPlayer_Section:Button({
+                        Name = "Teleport To Player",
+                        Callback = function()
+                            if Players:FindFirstChild(Library.Selected_Player.Name) and Players:FindFirstChild(Library.Selected_Player.Name).Character then
+                                Config:Teleport(Players[Library.Selected_Player.Name].Character.HumanoidRootPart.CFrame)
+                            end
+                        end
+                    })
+
+                    SelectedPlayer_Section:Button({
+                        Name = "Down Player - Hold Gun",
+                        Callback = function()
+                            Config:GunRemote(Library.Selected_Player.Name, "HumanoidRootPart", (Players[Library.Selected_Player.Name].Character.Humanoid.Health - 5))
+                        end
+                    })
+
+                    SelectedPlayer_Section:Button({
+                        Name = "Kill Player - Hold Gun",
+                        Callback = function()
+                            Config:GunRemote(Library.Selected_Player.Name, "HumanoidRootPart", math.huge)
+                        end
+                    })
+
+                    SelectedPlayer_Section:Button({
+                        Name = "God Player - Hold Gun",
+                        Tooltip = "This will break the player's gun system and movement systems.",
+                        Callback = function()
+                            Config:GunRemote(Library.Selected_Player.Name, "HumanoidRootPart", math.sqrt(-1))
+                        end
+                    })
+
+                    SelectedPlayer_Section = Subpages["Players"]:Section({Name = "Global Player Utilities", Icon = Library:GetImage("Groups"), Side = 2})
+
+                    SelectedPlayer_Section:Button({
+                        Name = "God All Players - Hold Gun",
+                        Tooltip = "This will break their gun systems and movement systems.",
+                        Callback = function()
+                            for Index, Value in Players:GetPlayers() do
+                                if Value ~= LocalPlayer and Value.Character and Value.Character:FindFirstChild("Humanoid") and Value.Character:FindFirstChild("Humanoid").Health ~= 0 and not Value.Character:FindFirstChildOfClass("ForceField") and Value.Character:FindFirstChild("HumanoidRootPart") then
+                                    if Players:FindFirstChild(Value.Name) then
+                                        Config:GunRemote(Value.Name, "HumanoidRootPart", math.sqrt(-1))
+                                        task.wait(0.01)
+                                    end
+                                end
+                            end
+                        end
+                    })
+
+                    SelectedPlayer_Section:Button({
+                        Name = "Kill All Players - Hold Gun",
+                        Callback = function()
+                            for Index, Value in Players:GetPlayers() do
+                                if Value ~= LocalPlayer and Value.Character and Value.Character:FindFirstChild("Humanoid") and Value.Character:FindFirstChild("Humanoid").Health ~= 0 and not Value.Character:FindFirstChildOfClass("ForceField") and Value.Character:FindFirstChild("HumanoidRootPart") then
+                                    if Players:FindFirstChild(Value.Name) then
+                                        Config:GunRemote(Value.Name, "HumanoidRootPart", math.huge)
+                                        task.wait(0.01)
+                                    end
+                                end
+                            end
+                        end
+                    })
+                end
+            end
+
+            do -- Money
+                do -- Auto Farms
+                    local AutoFarm_Section = Subpages["Money"]:Section({Name = "Auto-Farm Utilities", Icon = Library:GetImage("MoneyBag"), Side = 1})
+
+                    AutoFarm_Section:Toggle({
+                        Name = "Auto Farm Construction",
+                        Flag = "FarmConstruction/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.FarmConstructionJob = State
+                        end
+                    })
+
+                    AutoFarm_Section:Toggle({
+                        Name = "Auto Farm Bank Robbery",
+                        Flag = "FarmBank/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.FarmBank = State
+                        end
+                    })
+
+                    AutoFarm_Section:Toggle({
+                        Name = "Auto Farm House Robbery",
+                        Flag = "FarmHouses/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.FarmHouses = State
+                        end
+                    })
+
+                    AutoFarm_Section:Toggle({
+                        Name = "Auto Farm Studio Robbery",
+                        Flag = "FarmStudio/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.FarmStudio = State
+                        end
+                    })
+
+                    AutoFarm_Section:Toggle({
+                        Name = "Auto Farm Dumpsters",
+                        Flag = "FarmDumpsters/TheBronx",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.FarmTrash = State
+                        end
+                    })
+
+                    AutoFarm_Section = Subpages["Money"]:Section({Name = "Auto-Farm Settings", Icon = Library:GetImage("Wrench"), Side = 1})
+
+                    AutoFarm_Section:Toggle({
+                        Name = "Idle Safety Teleport",
+                        Flag = "TheBronx3/AFKSafetyTeleport",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.AFKCheck = State
+                        end
+                    })
+                    
+                    AutoFarm_Section:Toggle({
+                        Name = "Auto Sell Trash",
+                        Flag = "TheBronx3/AutoSellTrash",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.AutoSellTrash = State
+                        end
+                    })
+
+                    local ManualFarm_Section = Subpages["Money"]:Section({Name = "Manual Utilities", Icon = Library:GetImage("AutoManifacturing"), Side = 2})
+
+                    ManualFarm_Section:Toggle({
+                        Name = "Auto Collect Dropped Cash",
+                        Flag = "TheBronx3/CollectDroppedCash",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.CollectDroppedMoney = State
+                        end
+                    })
+
+                    ManualFarm_Section:Toggle({
+                        Name = "Auto Collect Dropped Loot",
+                        Flag = "TheBronx3/CollectDroppedLoot",
+                        Tooltip = "You need the looting gamepass for this!",
+                        Default = false,
+                        Callback = function(State)
+                            Config.The_Bronx.Farms.CollectDroppedLoot = State
+                        end
+                    })
+
+                    ManualFarm_Section:Button({Name = "Clean All Filthy Money", Callback = function()
+                        if LocalPlayer.stored.FilthyStack.Value == 0 then 
+                            return Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "You don't have any filthy cash!",
+                                Duration = 5,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                        end
+
+                        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+                        if not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character:FindFirstChild("Humanoid").Health == 0 then return end
+            
+                        local Cleaner = Config:GetGoodCleaner()
+                        
+                        if not Cleaner then
+                            return Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "Couldn't find a good cleaner!",
+                                Duration = 5,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                        end
+            
+                        Config:Teleport(Cleaner.WorldPivot)
+            
+                        task.wait(0.4)
+            
+                        fireproximityprompt(Cleaner:FindFirstChild("CashPrompt", true))
+            
+                        repeat task.wait() until Cleaner:FindFirstChild("On", true).Color == Color3.fromRGB(74, 156, 69)
+            
+                        task.wait(0.5)
+            
+                        fireproximityprompt(Cleaner:FindFirstChild("CashPrompt", true))
+                        
+                        task.wait(0.25)
+            
+                        Config:Teleport(Cleaner.WorldPivot)
+            
+                        task.wait(0.4)
+            
+                        repeat task.wait() until LocalPlayer.Backpack:FindFirstChild("MoneyReady")
+            
+                        LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack["MoneyReady"])
+            
+                        repeat task.wait(1) fireproximityprompt(Cleaner:FindFirstChild("GrabPrompt", true)) until not LocalPlayer.Character:FindFirstChild("MoneyReady")
+                        
+                        repeat task.wait()
+                        until LocalPlayer.Backpack:FindFirstChild("BagOfMoney")
+            
+                        Config:Teleport(CFrame.new(-222, 284, -1201))
+            
+                        task.wait(0.4)
+            
+                        LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack["BagOfMoney"])
+            
+                        task.wait(1)
+            
+                        fireproximityprompt(Workspace.ATMMoney.Prompt)
+                    end})
+                end 
+
+                do -- Vulns
+                    local Vuln_Section = Subpages["Money"]:Section({Name = "Vulnerabilities", Icon = Library:GetImage("EncryptedOff"), Side = 2})
+
+                    local GetFruitCup = LPH_NO_VIRTUALIZE(function()
+                        local Found, Cup = false, nil;
+
+                        for Index, Value in next, {LocalPlayer.Backpack:GetChildren(), LocalPlayer.Character:GetChildren()} do
+                            for _Index, _Value in Value do
+                                if _Value:IsA("Tool") and _Value.Name == "Ice-Fruit Cupz" then
+                                    if _Value["IceFruit Cup"]["IceFruit PunchMedium"].Transparency ~= 1 then
+                                        Found = true
+                                        Cup = _Value
+                                        break
+                                    end
+                                end
+                            end
+                        end 
+
+                        return Found, Cup
+                    end)
+
+                    Vuln_Section:Button({Name = "Generate Max Illegal Money", Tooltip = "You will need around $5,000 to do this.\nIt might take around 2-3 minutes.", Callback = function()
+                        local Found, Cup = GetFruitCup()
+
+                        if Cup and Found then
+                            Config:HideScreen("generating illegal cash 💷\n please wait.")
+
+                            local OLDCFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
+
+                            if Cup.Parent == LocalPlayer.Backpack then
+                                LocalPlayer.Character.Humanoid:EquipTool(Cup)
+                                task.wait(1)
+                            end 
+
+                            Config:Teleport(Workspace["IceFruit Sell"].CFrame)
+
+                            task.wait(.5)
+
+                            for Index=1, 4000 do
+                                task.spawn(function()
+                                    fireproximityprompt(Workspace["IceFruit Sell"].ProximityPrompt)
+                                end)
                             end
 
-                            Config:Teleport(Car:FindFirstChildWhichIsA("Part", true).CFrame + Vector3.new(0,5,0))
+                            Config:Teleport(OLDCFrame)
+
+                            return
+                        end
+
+                        Config:HideScreen("buying products 🍉\nif you are stuck here, PLEASE WAIT!!")
+
+                        local OLDCFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
+
+                        local Itemz = {"FijiWater", "FreshWater", "Ice-Fruit Bag", "Ice-Fruit Cupz"}
+                        local Stove;
+
+                        for Index, Value in Workspace.CookingPots:GetChildren() do
+                            if Value:IsA("Model") then
+                                if Value:FindFirstChildWhichIsA("ProximityPrompt", true).ActionText == "Turn On" and Value:FindFirstChildWhichIsA("ProximityPrompt", true).Enabled then
+                                    Stove = Value
+
+                                    break
+                                end
+                            end
+                        end
+
+                        for Index, Value in Itemz do
+                            if not LocalPlayer.Backpack:FindFirstChild(Value) then
+                                ReplicatedStorage:WaitForChild("ExoticShopRemote"):InvokeServer(Value)
+                                task.wait(1)
+                            end
+                        end
+
+                        local Check = false;
+
+                        for Index, Value in Itemz do
+                            if not LocalPlayer.Backpack:FindFirstChild(Value) then
+                                Check = true
+                            end
+                        end
+
+                        if Check then
+                            Config:DeleteHiddenScreen()
+                            Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "Couldn't find the items! Please make sure you have more than $5,000",
+                                Duration = 10,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                            return
+                        end
+
+                        Config:SetText("generating illegal cash 💷\n this takes around 1-2 minutes.\n please wait.")
+
+                        Config:Teleport(Stove.CookPart.CFrame)
+
+                        task.wait(1)
+
+                        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+                        LocalPlayer.Character.HumanoidRootPart.Anchored = true
+
+                        task.wait(1.5)
+
+                        fireproximityprompt(Stove:FindFirstChildWhichIsA("ProximityPrompt", true))
+
+                        task.wait(2)
+
+                        for Index, Value in {"FijiWater", "FreshWater", "Ice-Fruit Bag"} do
+                            LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack[Value])
+                            task.wait(1)
+                            fireproximityprompt(Stove:FindFirstChildWhichIsA("ProximityPrompt", true))
+                            task.wait(3)
+                        end
+
+                        repeat wait() until 
+                        Stove.CookPart.Steam.LoadUI.Enabled == false
+
+                        if not LocalPlayer.Character:FindFirstChild("Ice-Fruit Cupz") then
+                            LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack['Ice-Fruit Cupz'])
+                            task.wait(1)
+                        end
+                        
+                        task.wait(1)
+
+                        fireproximityprompt(Stove:FindFirstChildWhichIsA("ProximityPrompt", true))
+
+                        task.wait(3)
+
+                        LocalPlayer.Character.HumanoidRootPart.Anchored = false
+
+                        Config:Teleport(Workspace["IceFruit Sell"].CFrame)
+
+                        task.wait(1)
+
+                        LocalPlayer.Character.HumanoidRootPart.Anchored = true
+
+                        task.wait(1.5)
+
+                        if not LocalPlayer.Character:FindFirstChild("Ice-Fruit Cupz") then
+                            LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack['Ice-Fruit Cupz'])
+                            task.wait(1)
+                        end
+
+                        Workspace["IceFruit Sell"].ProximityPrompt.HoldDuration = 0
+
+                        for Index=1, 4000 do
+                            task.spawn(function()
+                                fireproximityprompt(Workspace["IceFruit Sell"].ProximityPrompt)
+                            end)
+                        end
+
+                        LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+
+                        task.wait(0.5)
+
+                        Config:Teleport(OLDCFrame)
+
+                        task.wait(2)
+
+                        Config:DeleteHiddenScreen()
+                    end})
+
+                    local Cooldown = false; Vuln_Section:Button({Name = "Duplicate Current Item", Tooltip = "You need to hold the gun you're trying to dupe.\nIf it doesn't work, retry.", Callback = function()
+                        if Cooldown then
+                            Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "Cooldown! Please wait.",
+                                Duration = 5,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                            return
+                        end
+
+                        Cooldown = true
+                        local Player = Players.LocalPlayer
+                        local Backpack = Player.Backpack
+
+                        local Tool = Player.Character:FindFirstChildOfClass("Tool")
+
+                        if not Tool then
+                            Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "Couldn't find your tool! Please make sure you're holding one.",
+                                Duration = 10,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                            return
+                        end
+
+                        Player.Character.Humanoid:UnequipTools()
+
+                        local ToolName = Tool.Name
+                        local ToolId
+
+                        local Connection = ReplicatedStorage.MarketItems.ChildAdded:Connect(
+                            function(item)
+
+                                if item.Name == ToolName then
+                                    if item:WaitForChild('owner').Value == Player.Name then
+                                        ToolId = item:GetAttribute('SpecialId')
+                                    end
+                                end
+                            end
+                        )
+
+                        spawn(function()
+                            ReplicatedStorage.ListWeaponRemote:FireServer(ToolName, 99999)
+                        end)
+
+                        task.wait(.26)
+
+                        spawn(function()
+                            ReplicatedStorage.BackpackRemote:InvokeServer('Store', ToolName)
+                        end)
+
+                        task.wait(3)
+
+                        spawn(function()
+                            ReplicatedStorage.BuyItemRemote:FireServer(ToolName, 'Remove', ToolId)
+                        end)
+
+                        spawn(function()
+                            ReplicatedStorage.BackpackRemote:InvokeServer("Grab", ToolName)
+                        end)
+
+                        Connection:Disconnect()
+
+                        task.wait(3)
+
+                        Cooldown = false
+                    end})
+
+                    local ToolName;
+                    Vuln_Section:Toggle({Name = "Automatically Dupe Current Item",  Tooltip = "You need to hold the gun you're trying to dupe.", Flag = "TheBronx3/AutoDupe", Callback = function(State)
+                        local Tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+
+                        if not Tool and State then
+                            Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "Couldn't find your tool! Please make sure you're holding one.",
+                                Duration = 10,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                            return
+                        end
+
+                        if Tool and State then
+                            ToolName = Tool.Name    
+                        end
+                    end})
+                    
+                    task.spawn(LPH_NO_VIRTUALIZE(function()
+                        while true do task.wait(.1)
+                            if not Library.Flags["TheBronx3/AutoDupe"] then continue end
+                            if tostring(ToolName) == "nil" then continue end
+                            LocalPlayer.Character.Humanoid:UnequipTools()
+
+                            task.wait(.25)
+                            local ToolId
+
+                            local Connection = ReplicatedStorage.MarketItems.ChildAdded:Connect(
+                                function(item)
+
+                                    if item.Name == ToolName then
+                                        if item:WaitForChild('owner').Value == LocalPlayer.Name then
+                                            ToolId = item:GetAttribute('SpecialId')
+                                        end
+                                    end
+                                end
+                            )
+                            
+                            spawn(function()
+                                ReplicatedStorage.ListWeaponRemote:FireServer(ToolName, 99999)
+                            end)
+
+                            task.wait(.26)
+
+                            spawn(function()
+                                ReplicatedStorage.BackpackRemote:InvokeServer('Store', ToolName)
+                            end)
+
+                            task.wait(3)
+
+                            spawn(function()
+                                ReplicatedStorage.BuyItemRemote:FireServer(ToolName, 'Remove', ToolId)
+                            end)
+
+                            spawn(function()
+                                ReplicatedStorage.BackpackRemote:InvokeServer("Grab", ToolName)
+                            end)
+
+                            Connection:Disconnect()
+
+                            task.wait(3.5)
+                        end
+                    end))
+                end
+            end
+
+            do -- Teleports
+                do -- Location Teleports
+                    local Teleport_Section = Subpages["Teleports"]:Section({Name = "Teleportation Utilities", Icon = Library:GetImage("JumpToElement"), Side = 1})
+
+                    local Locations = {
+                        ["Deli Market 🥪"] = CFrame.new(-769, 255, -686);
+                        ["Capital One Bank 🏦"] = CFrame.new(-225, 284, -1223);
+                        ["Ice Box 🧊"] = CFrame.new(-198.8927001953125, 283.8486633300781, -1170.4500732421875);
+                        ["Hotel 🏨"] = CFrame.new(-973, 254, -939);
+                        ["Drip Store 👓"] = CFrame.new(67462.6953125, 10489.0322265625, 546.6762084960938);
+                        ["Gun Shop 🔫"] = CFrame.new(92974, 122099, 17233);
+                        ["Car Dealer 🚗"] = CFrame.new(-378.6668701171875, 253.2564697265625, -1245.4259033203125);
+                        ["Laundromat 💷"] = CFrame.new(-979.4635620117188, 253.65318298339844, -689.3339233398438);
+                        ["Studio 🎙"] = CFrame.new(93408.453125, 14484.7158203125, 570.139404296875);
+                        ["Basketball Court 🏀"] = CFrame.new(-942, 254, -409);
+                        ["Robbable Ice Box 🧊"] = CFrame.new(-232, 284, -1265);
+                        ["Exotic Dealer / Grass House 🍃"] = CFrame.new(-1521.943115234375, 272.5462646484375, -984.3020629882812);
+                        ["Safe 🔒"] = CFrame.new(-137, 303, -915);
+                        ["Roof Top / Bank Tools 🛠"] = CFrame.new(-409, 334, -556);
+                        ["Second Gun Shop 🔫"] = CFrame.new(66202, 123615.7109375, 5749.81689453125);
+                        ["Construction Job 🔨"] = CFrame.new(-1729, 371, -1171);
+                        ["Backpack Shop 🎒"] = CFrame.new(-694, 254, -684);
+                        ["Hospital 🏥"] = CFrame.new(-1592, 254, 23);
+                    };
+
+                    local Location_Names = {}
+
+                    for Index, Value in Locations do
+                        table.insert(Location_Names, Index)
+                    end; table.sort(Location_Names)
+
+                    Teleport_Section:Dropdown({Name = "Select Location", Flag = "TheBronx3/SelectLocationToTeleport", MaxSize = 200, Items = Location_Names, Multi = false})
+
+                    Teleport_Section:Button({Name = "Teleport To Selected Location", Callback = function()
+                        if Library.Flags["TheBronx3/SelectLocationToTeleport"] and Locations[Library.Flags["TheBronx3/SelectLocationToTeleport"]] then
+                            Config:Teleport(Locations[Library.Flags["TheBronx3/SelectLocationToTeleport"]])
+                        end
+                    end})
+                end 
+
+                do -- Safe Teleports
+                    local SafeTeleportSection = Subpages["Teleports"]:Section({Name = "Safe Utilities", Icon = Library:GetImage("Lock"), Side = 1})
+
+                    local _SafeDropdown = SafeTeleportSection:Dropdown({Name = "Select Item (In Safe)", Options = {}, Flag = "TheBronx3/SelectItem/Safe", Default = nil, MaxSize = 175, Multi = false})
+
+                    SafeTeleportSection:Button({Name = "Take Item From Safe", Tooltip = "Takes out selected item from your safe.", Callback = function()
+                        local Safe, OldCFrame = Config:GetWorkingSafe(), LocalPlayer.Character.HumanoidRootPart.CFrame
+
+                        local ToolName = Library.Flags["TheBronx3/SelectItem/Safe"]
+                        if not ToolName then return end
+
+                        Config:Teleport(Safe.ChestClicker.CFrame + Vector3.new(0,3,0))
+
+                        local RECIEVED = false
+                        local FORCED = false
+                        
+                        local Backpack_ChildAdded; Backpack_ChildAdded = LocalPlayer.Backpack.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function(Child)
+                            if Child.Name == ToolName then
+                                RECIEVED = true
+                                Backpack_ChildAdded:Disconnect()
+                            end
+                        end))
+
+                        task.delay(3, LPH_NO_VIRTUALIZE(function()
+                            RECIEVED = true
+                            FORCED = true
+                        end))
+
+                        task.wait(0.3)
+
+                        ReplicatedStorage.Inventory:FireServer("Change", ToolName, "Inv", Safe)
+
+                        repeat RunService.Heartbeat:Wait() until RECIEVED
+
+                        local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
+                        local LookVector = HumanoidRootPart.CFrame.LookVector
+                        Config:Teleport(CFrame.new(OldCFrame.Position, OldCFrame.Position + LookVector))
+
+                        if not FORCED then
+                            Library:Notification({
+                                Name = "Valary.gg | Success",
+                                Description = string.format("Successfully took %s out of your safe!", ToolName),
+                                Duration = 5,
+                                Icon = "116339777575852",
+                                IconColor = Color3.fromRGB(52, 255, 164)
+                            })
                         else
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "This player or their car was not found!",
-                                Duration = 7.5,
+                            Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = string.format("Couldn't get %s from your safe!", ToolName),
+                                Duration = 5,
                                 Icon = "97118059177470",
                                 IconColor = Color3.fromRGB(255, 120, 120)
                             })
                         end
                     end})
 
-                    SelectedPlayer_Section:Button({Name = "Kill Selected Player - Hold Gun", Callback = function()
-                        if not Library.Selected_Player or not Library.Selected_Player.Character or not Library.Selected_Player.Character:FindFirstChild("HumanoidRootPart") then
-                            return
-                        end
+                    SafeTeleportSection:Button({Name = "Store Item In Safe", Tooltip = "Hold the item you want to safe.", Callback = function()
+                        local Safe, OldCFrame = Config:GetWorkingSafe(), LocalPlayer.Character.HumanoidRootPart.CFrame
 
-                        if (LocalPlayer.Character.HumanoidRootPart.Position - Library.Selected_Player.Character:FindFirstChild("HumanoidRootPart").Position).Magnitude > 374 then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = 'Player must be within 375 studs!',
-                                Duration = 7.5
-                            })
-                        end
+                        local Tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                        if not Tool then return end
+
+                        Tool = Tool.Name
+                        LocalPlayer.Character.Humanoid:UnequipTools()
+
+                        Config:Teleport(Safe.ChestClicker.CFrame + Vector3.new(0,3,0))
+
+                        local SAFED = false
+                        local FORCED = false
                         
-                        local Gun =  Config.GetGun()
-
-                        if Config.InsideSafezone(Library.Selected_Player) then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = 'Player is inside a safezone!',
-                                Duration = 7.5
-                            })
-                        end
-                        
-                        if Library.Selected_Player and Library.Selected_Player.Character and Library.Selected_Player.Character:FindFirstChild("HumanoidRootPart") then
-                            local Start = tick()
-
-                            repeat task.wait(0.01)
-                                Config:ShootPlayer(Library.Selected_Player.Name)
-                            until (tick() - Start) >= 3 or not Library.Selected_Player or not Library.Selected_Player.Character or not Library.Selected_Player.Character:FindFirstChild("Humanoid") or Library.Selected_Player.Character:FindFirstChild("Humanoid").Health == 0
-                            
-                            if (tick() - Start) >= 3 then
-                                return Library:Notification({
-                                    Name = "Valary.gg | Error",
-                                    Description = "Couldn't kill player, most likely behind walls!",
-                                    Duration = 7.5
-                                })
+                        local Backpack_ChildRemoved; Backpack_ChildRemoved = LocalPlayer.Backpack.ChildRemoved:Connect(LPH_NO_VIRTUALIZE(function(Child)
+                            if Child.Name == Tool then
+                                SAFED = true
+                                Backpack_ChildRemoved:Disconnect()
                             end
-                        end
-                    end})
+                        end))
 
-                    SelectedPlayer_Section:Dropdown({
-                        Name = "Select Body Parts",
-                        Flag = "Select_BodyParts_Modifications",
-                        Items = {
-                            "Head",
-                            "Hair",
-                            "UpperTorso",
-                            "LowerTorso",
-                            "LeftUpperArm",
-                            "LeftLowerArm",
-                            "RightUpperArm",
-                            "RightLowerArm",
-                            "LeftUpperLeg",
-                            "LeftLowerLeg",
-                            "RightUpperLeg",
-                            "RightLowerLeg",
-                            --"HumanoidRootPart"
-                        },
-                        Default = {"Head", "Hair"},
-                        Multi = true,
-                        MaxSize = 200
-                    })
+                        task.delay(3, LPH_NO_VIRTUALIZE(function()
+                            SAFED = true
+                            FORCED = true
+                        end))
 
-                    SelectedPlayer_Section:Slider({Name = "Transparency Value", Min = 0, Max = 1, Default = 0.5, Flag = "Transparency_Value_Modification", Decimals = 0.01})
+                        task.wait(0.3)
 
-                    SelectedPlayer_Section:Button({Name = "Apply Transparency", Callback = function()
-                        if not Library.Selected_Player then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find target!",
-                                Duration = 7.5,
+                        ReplicatedStorage.Inventory:FireServer("Change", Tool, "Backpack", Safe)
+
+                        repeat RunService.Heartbeat:Wait() until SAFED
+
+                        local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
+                        local LookVector = HumanoidRootPart.CFrame.LookVector
+                        Config:Teleport(CFrame.new(OldCFrame.Position, OldCFrame.Position + LookVector))
+
+                        if not FORCED then
+                            Library:Notification({
+                                Name = "Valary.gg | Success",
+                                Description = string.format("Successfully safed your %s!", Tool),
+                                Duration = 5,
+                                Icon = "116339777575852",
+                                IconColor = Color3.fromRGB(52, 255, 164)
                             })
-                        end
-
-                        if not Library.Selected_Player.Character then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find targets character!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)) then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find your car! (Need Nissan GTR)",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):GetAttribute("Car") ~= "Nissan GTR" then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Your car must be a Nissan GTR for this to work!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        for Index, Value in Library.Selected_Player.Character:GetChildren() do
-                            if table.find(Library.Flags.Select_BodyParts_Modifications, Value.Name) or (Value.Name == "Ears" and table.find(Library.Flags.Select_BodyParts_Modifications, "Head")) then
-                                pcall(function()
-                                    FireServer(Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):FindFirstChild("Lights_FE"),
-                                        "UpdateLight",
-                                        Value,
-                                        Value.Material,
-                                        Value.BrickColor,
-                                        Library.Flags.Transparency_Value_Modification,
-                                        false,
-                                        15
-                                    )
-                                end)
-                            end
-                        end
-                    end})
-
-                    SelectedPlayer_Section:Button({Name = "Fully Apply Transparency", Callback = function()
-                        if not Library.Selected_Player then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find target!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Library.Selected_Player.Character then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find targets character!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)) then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find your car!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):GetAttribute("Car") ~= "Nissan GTR" then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Your car must be a GTR for this to work!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        for Index, Value in Library.Selected_Player.Character:GetDescendants() do
-                            if Value.Name ~= "HumanoidRootPart" then
-                                pcall(function()
-                                    FireServer(Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):FindFirstChild("Lights_FE"),
-                                        "UpdateLight",
-                                        Value,
-                                        Value.Material,
-                                        Value.BrickColor,
-                                        Library.Flags.Transparency_Value_Modification,
-                                        false,
-                                        15
-                                    )
-                                end)
-                            end
-                        end
-                    end})
-
-                    SelectedPlayer_Section:Dropdown({
-                        Name = "Select Material",
-                        Flag = "Select_Materials_Modifications",
-                        Items = {
-                            "Fabric",       -- cloth-like look
-                            "ForceField",   -- glowing forcefield effect
-                            "Glass",        -- transparent / shiny
-                            "Ice",          -- frosty, semi-transparent
-                            "Marble",       -- polished stone
-                            "Metal",        -- shiny and reflective
-                            "Neon",         -- glowing neon
-                            "Plastic",      -- smooth base
-                            "Slate",        -- rough stone
-                            "SmoothPlastic",-- very clean/smooth
-                            "Wood",         -- natural wood
-                            "WoodPlanks"    -- wooden panel look
-                        },
-                        Default = "ForceField",
-                        Multi = false,
-                        MaxSize = 200
-                    })
-
-                    SelectedPlayer_Section:Button({Name = "Apply Material", Callback = function()
-                        if not Library.Selected_Player then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find target!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Library.Selected_Player.Character then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find targets character!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)) then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find your car! (Need Nissan GTR)",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):GetAttribute("Car") ~= "Nissan GTR" then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Your car must be a Nissan GTR for this to work!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        for Index, Value in Library.Selected_Player.Character:GetChildren() do
-                            if table.find(Library.Flags.Select_BodyParts_Modifications, Value.Name) or (Value.Name == "Ears" and table.find(Library.Flags.Select_BodyParts_Modifications, "Head")) then
-                                pcall(function()
-                                    FireServer(Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):FindFirstChild("Lights_FE"),
-                                        "UpdateLight",
-                                        Value,
-                                        Enum.Material[Library.Flags.Select_Materials_Modifications],
-                                        Value.BrickColor,
-                                        Value.Transparency,
-                                        false,
-                                        15
-                                    )
-                                end)
-                            end
-                        end
-                    end})
-
-                    SelectedPlayer_Section:Button({Name = "Fully Apply Material", Callback = function()
-                        if not Library.Selected_Player then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find target!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Library.Selected_Player.Character then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find targets character!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)) then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find your car!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):GetAttribute("Car") ~= "Nissan GTR" then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Your car must be a GTR for this to work!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        for Index, Value in Library.Selected_Player.Character:GetDescendants() do
-                            if Value.Name ~= "HumanoidRootPart" then
-                                pcall(function()
-                                    FireServer(Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):FindFirstChild("Lights_FE"),
-                                        "UpdateLight",
-                                        Value,
-                                        Enum.Material[Library.Flags.Select_Materials_Modifications],
-                                        Value.BrickColor,
-                                        Value.Transparency,
-                                        false,
-                                        15
-                                    )
-                                end)
-                            end
-                        end
-                    end})
-
-                    local SkinChanging_Utility = Subpages.Players:Section({Name = "Skin Changing Utilities", Icon = Library:GetImage("Wrist"), Side = 2})
-
-                    local BrickColors = {
-                        "Institutional white",  -- Very pale
-                        "Pastel brown",         -- Fair skin
-                        "Light orange",         -- Light skin
-                        "Brick yellow",         -- Beige
-                        "Earth orange",         -- Light tan
-                        "Medium yellowish brown", -- Tan
-                        "Dark orange",          -- Medium brown
-                        "Reddish brown",        -- Dark brown
-                        "Brown",                -- Deep brown
-                        "Black",
-
-                        -- Basic custom colors
-                        "Bright red",
-                        "Bright blue",
-                        "Bright green",
-                        "Bright yellow",
-                        "Bright orange",
-                        "Bright violet",
-                        "Pink"
-                    }
-
-                    if not table.find(BrickColors, tostring(LocalPlayer.Character.Head.BrickColor)) then
-                        table.insert(BrickColors, tostring(LocalPlayer.Character.Head.BrickColor))
-                    end
-
-                    table.sort(BrickColors)
-
-                    SkinChanging_Utility:Dropdown({
-                        Name = "Select Skin Color",
-                        Flag = "Select_SkinColor_Modifications",
-                        Items = BrickColors,
-                        Default = tostring(LocalPlayer.Character.Head.BrickColor),
-                        Multi = false,
-                        MaxSize = 200
-                    })
-                    
-                    SkinChanging_Utility:Button({Name = "Apply Skin Color", Callback = function()
-                        if not Library.Selected_Player then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find target!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Library.Selected_Player.Character then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find targets character!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)) then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find your car!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):GetAttribute("Car") ~= "Nissan GTR" then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Your car must be a GTR for this to work!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        for Index, Value in Library.Selected_Player.Character:GetChildren() do
-                            if table.find(Library.Flags.Select_BodyParts_Modifications, Value.Name) or (Value.Name == "Ears" and table.find(Library.Flags.Select_BodyParts_Modifications, "Head")) then
-                                pcall(function()
-                                    FireServer(Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):FindFirstChild("Lights_FE"),
-                                        "UpdateLight",
-                                        Value,
-                                        Value.Material,
-                                        BrickColor.new(Library.Flags.Select_SkinColor_Modifications),
-                                        Value.Transparency,
-                                        false,
-                                        15
-                                    )
-                                end)
-                            end
-                        end
-                    end})
-
-                    SkinChanging_Utility:Button({Name = "Fully Apply Skin Color", Callback = function()
-                        if not Library.Selected_Player then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find target!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Library.Selected_Player.Character then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find targets character!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if not Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)) then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Could not find your car!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        if Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):GetAttribute("Car") ~= "Nissan GTR" then
-                            return Library:Notification({
-                                Name = "Valary.gg | Error",
-                                Description = "Your car must be a GTR for this to work!",
-                                Duration = 7.5,
-                            })
-                        end
-
-                        for Index, Value in Library.Selected_Player.Character:GetDescendants() do
-                            if Value.Parent == Library.Selected_Player.Character then
-                                if not Value:IsA("MeshPart") then
-                                    continue
-                                end
-                            end
-
-                            if Value.Parent.Name == "HoodieDown" or Value.Parent.Name == "HoodieUp" then
-                                continue
-                            end
-
-                            if Value.Name ~= "HumanoidRootPart" then
-                                pcall(function()
-                                    FireServer(Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):FindFirstChild("Lights_FE"),
-                                        "UpdateLight",
-                                        Value,
-                                        Value.Material,
-                                        BrickColor.new(Library.Flags.Select_SkinColor_Modifications),
-                                        Value.Transparency,
-                                        false,
-                                        15
-                                    )
-                                end)
-                            end
-                        end
-                    end})
-                end
-
-                do -- Local Player Utilities
-                    local Local_Player_Utilites_Section = Subpages.Player:Section({Name = "Local Player Utilities", Icon = Library:GetImage("NewController30px"), Side = 1})
-
-                    Local_Player_Utilites_Section:Toggle({Name = "Infinite Stamina", Flag = "Infinite_Stamina", Default = false, Callback = function(State)
-                        Config.South_Bronx.InfiniteStamina = State
-                    end})
-
-                    Local_Player_Utilites_Section:Toggle({Name = "Instant Interact", Flag = "Instant_Interact", Default = false, Callback = function(State)
-                        Config.South_Bronx.InstantInteract = State
-                    end})
-
-                    Local_Player_Utilites_Section:Toggle({Name = "Respawn Where You Died", Flag = "Respawn_Where_You_Died", Default = false, Callback = function(State)
-                        Config.South_Bronx.Spawn_Where_You_Died = State
-                    end})
-
-                    Local_Player_Utilites_Section:Toggle({Name = "Hide Name - Client Only", Flag = "Hide_Name", Default = false, Callback = function(State)
-                        Config.South_Bronx.HideName = State
-                    end})
-
-                    local Actively_NoClipping = false;
-                    local _NoClipBind = nil;
-                    local _NoClipToggle = Local_Player_Utilites_Section:Toggle({Name = "No-Clip", Flag = "No_Clip", Default = false, Callback = function(State)
-                        if State and _NoClipBind and _NoClipBind.Toggled == false then
-                            _NoClipBind:Press(true)
-                        end
-
-                        if not State and _NoClipBind and _NoClipBind.Toggled == true then
-                            _NoClipBind:Press(false)
-                        end
-
-                        if State then
-                            if not Actively_NoClipping then
-                                Actively_NoClipping = true
-                                RunService:BindToRenderStep("No_Clip", 400, function()
-                                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                                        if not Config.Teleporting and LocalPlayer.Character.Humanoid.Health ~= 0 then
-                                            for Index, Value in LocalPlayer.Character:GetDescendants() do
-                                                if Player_Collide_Data[Value.Name] then
-                                                    pcall(function()
-                                                        Value.CanCollide = false
-                                                    end)
-                                                end
-                                            end
-                                        else
-                                            for Index, Value in LocalPlayer.Character:GetDescendants() do
-                                                if Player_Collide_Data[Value.Name] then
-                                                    pcall(function()
-                                                        Value.CanCollide = true
-                                                    end)
-                                                end
-                                            end
-                                        end
-                                    end
-                                end)
-                            end
                         else
-                            RunService:UnbindFromRenderStep("No_Clip")
-                            Actively_NoClipping = false
-
-                            for Index, Value in LocalPlayer.Character:GetDescendants() do
-                                if Player_Collide_Data[Value.Name] then
-                                    pcall(function()
-                                        Value.CanCollide = true
-                                    end)
-                                end
-                            end
+                            Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = string.format("Couldn't safe your %s!", Tool),
+                                Duration = 5,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
                         end
                     end})
-                    
-                    _NoClipBind = _NoClipToggle:Keybind({Name = "No-Clip", Flag="NoClipBind",Default=Enum.KeyCode.X,Mode="toggle",Callback=function(State)
-                        _NoClipToggle:Set(State)
-                    end})
 
-                    Local_Player_Utilites_Section:Slider({Name = "Speed Value", Min = 0, Max = 100, Default = 50, Flag = "SpeedEnabled_Value", Suffix = "s/ps", Decimals = 0.1, Callback = function(State)
-                        Config.South_Bronx.SpeedValue = State/(Console_Server and 10 or 200)
-                    end})
+                    -- Refresh Safe Items
+                        local Items = {}
 
-                    local _SpeedBind = nil;
-                    local _SpeedToggle = Local_Player_Utilites_Section:Toggle({Name = "Speed Enabled", Flag = "Speed_Enabled", Default = false, Callback = function(State)
-                        if State and _SpeedBind and _SpeedBind.Toggled == false then
-                            _SpeedBind:Press(true)
+                        for Index, Value in LocalPlayer:WaitForChild("InvData"):GetChildren() do
+                            table.insert(Items, Value.Name)
+                        end; table.sort(Items)
+
+                        _SafeDropdown:Refresh(Items)
+
+                        LocalPlayer:WaitForChild("InvData").ChildAdded:Connect(LPH_NO_VIRTUALIZE(function(Child)
+                            _SafeDropdown:AddOption(Child.Name)
+                        end))
+
+                        LocalPlayer:WaitForChild("InvData").ChildRemoved:Connect(LPH_NO_VIRTUALIZE(function(Child)
+                            _SafeDropdown:RemoveOption(Child.Name)
+                        end))
+                    --end
+                end
+                
+                do -- Purchase Items
+                    local PurchaseSection_Item = Subpages.Teleports:Section({Name = "Purchasing Utilities", Icon = Library:GetImage("CreditCard"), Side = 2})
+
+                    PurchaseSection_Item:Dropdown({Name = "Select Item", Items = Config.The_Bronx.Guns, MaxSize = 200, Flag = "TheBronx3/SelectItemToPurchase", Multi = false})
+
+                    PurchaseSection_Item:Button({Name = "Purchase Selected Item", Callback = LPH_NO_VIRTUALIZE(function()
+                        local self = string.match(Library.Flags["TheBronx3/SelectItemToPurchase"], "^(.*) %-");
+
+                        self = self:match("^%s*(.-)%s*$");
+                        local OldCFrame = LocalPlayer.Character.HumanoidRootPart.CFrame;
+                        local Prompt = Workspace:FindFirstChild("GUNS")[self]:FindFirstChildWhichIsA("ProximityPrompt",true);
+                        if (Workspace:FindFirstChild("GUNS")[self]:FindFirstChild("GamepassID", true) and not MarketplaceService:UserOwnsGamePassAsync(LocalPlayer.UserId, Workspace:FindFirstChild("GUNS")[self]:FindFirstChild("GamepassID",true).Value)) then 
+                            return Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "You do not own this gamepass!",
+                                Duration = 7.5,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
                         end
+                        
+                        local Part = Prompt.Parent:IsA("Part") and Prompt.Parent.CFrame or Prompt.Parent:IsA("MeshPart") and Prompt.Parent.CFrame or Prompt.Parent:IsA("UnionOperation") and Prompt.Parent.CFrame;
+                        if LocalPlayer.stored.Money.Value < Workspace:FindFirstChild("GUNS")[self]:FindFirstChild("Price",true).Value then
+                            return Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = string.format("You are $%s short!", Workspace:FindFirstChild("GUNS")[self]:FindFirstChild("Price",true).Value - LocalPlayer.stored.Money.Value),
+                                Duration = 7.5,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                        end;
+                        
+                        Config:Teleport(Part)
 
-                        if not State and _SpeedBind and _SpeedBind.Toggled == true then
-                            _SpeedBind:Press(false)
-                        end
+                        task.wait(.3)
 
-                        Config.South_Bronx.Speed = State
-                    end})
-                    
-                    _SpeedBind = _SpeedToggle:Keybind({Name = "Speed Enabled", Flag="SpeedBind",Default=Enum.KeyCode.G,Mode="toggle",Callback=function(State)
-                        _SpeedToggle:Set(State)
-                    end})
-
-                    local Teleport_Timing = Subpages.Player:Section({Name = "Teleportation Timing", Icon = Library:GetImage("HourglassEmpty"), Side = 2})
-
-                    if not Console_Server then
-                        local Teleport_Method = Subpages.Player:Section({Name = "Teleportation Method", Icon = Library:GetImage("Wrench"), Side = 1})
-
-                        --[[Teleport_Method:Toggle({Name = "Use Frame Based Timing", Flag = "SouthBronx/Teleport/FrameBased", Default = true, Callback = function(State)
-                            Config.South_Bronx.FrameBasedTiming=State
-                        end})
-
-                        Teleport_Method:Toggle({Name = "Use Ping Based Timing", Flag = "SouthBronx/Teleport/PingBased", Default = false, Callback = function(State)
-                            Config.South_Bronx.PingBasedTiming=State
-                        end})
-
-                        Teleport_Method:Slider({Name = "Ping Compensation",Flag = "SouthBronx/Teleport/PingCompensation", Min = -50, Suffix = "ping", Max = 50, Default = 20, Decimals = 0.1, Callback = function(State)
-                            Config.South_Bronx.PingCompensation = State
-                        end})]]
-
-                        Teleport_Method:Dropdown({Name = "Select Method", Flag = "SouthBronx/Teleport/Method", Items = {"Exempt + Tween", "Exempt Only"}, MaxSize = 125, Default = "Exempt + Tween", Callback = function(State)
-                            Config.South_Bronx.Teleport_Method = State
-                        end})
-
-                        Teleport_Timing:Toggle({Name = "Use Frame Based Timing", Flag = "SouthBronx/Teleport/FrameBased", Default = true, Callback = function(State)
-                            Config.South_Bronx.FrameBasedTiming=State
-                        end})
-
-                        Teleport_Timing:Toggle({Name = "Use Ping Based Timing", Flag = "SouthBronx/Teleport/PingBased", Default = false, Callback = function(State)
-                            Config.South_Bronx.PingBasedTiming=State
-                        end})
-
-                        Teleport_Timing:Slider({Name = "Ping Compensation",Flag = "SouthBronx/Teleport/PingCompensation", Min = -50, Suffix = "ping", Max = 50, Default = 20, Decimals = 0.1, Callback = function(State)
-                            Config.South_Bronx.PingCompensation = State
-                        end})
-                    else
-                        Teleport_Timing:Label("You are in a console server, where the anticheat is completely disabled, all teleports are instant!")
-                    end
-
-                    local Inventory_Searcher = Subpages.Player:Section({Name = "Inventory Searcher", Icon = Library:GetImage("FolderEye"), Side = 2})
-
-                    local Inventory_Items = nil
-
-                    Inventory_Searcher:Textbox({
-                        Name = "Items To Search For",
-                        Default = "", 
-                        Tooltip = "All player's with items matching the text here\nwill be displayed on the label below.",
-                        Flag = "SouthBronx/InventorySearch/Text", 
-                        Placeholder = "search here...", 
-                        Callback = LPH_NO_VIRTUALIZE(function(State)
-                            if Inventory_Items then
-                                local Data = {}
-
-                                for Index, Value in Players:GetPlayers() do
-                                    if Value == LocalPlayer then continue end
-
-                                    for _Index, _Value in Value.Backpack:GetChildren() do
-                                        if string.find(_Value.Name:lower(), tostring(State):lower()) then
-                                            table.insert(Data, string.format("%s (%s)", Value.Name , _Value.Name))
-                                        end
-                                    end
-                                end
-
-                                local Info = "None"
-
-                                if #Data >= 1 then
-                                    Info = table.concat(Data, ", ")                                    
-                                end
-
-                                Inventory_Items:SetText(string.format("Player's with items matching the text : %s", Info))
+                        local ItemReceieved = false;
+                        local Check ; Check = LocalPlayer.Backpack.ChildAdded:Connect(function(Child)
+                            if tostring(Child) == tostring(self) then
+                                ItemReceieved = true
+                                Check:Disconnect()
                             end
                         end)
-                    })
 
-                    Inventory_Items = Inventory_Searcher:Label("Player's with items matching the text : N/A", true)
+                        task.spawn(function()
+                            task.wait(1.5)
+                            ItemReceieved = true
+                        end)
 
-                    --[[if LPH_OBFUSCATED == nil or tostring(LRM_LinkedDiscordID) == "734358389936881775" then
-                        local Purchase_Items = Subpages.Player:Section({Name = "Purchase Items", Icon = Library:GetImage("ShoppingCart"), Side = 2})
+                        repeat task.wait(); fireproximityprompt(Prompt); until ItemReceieved == true;
+                        
+                        Library:Notification({
+                            Name = "Valary.gg | Success",
+                            Description = "Successfully purchased "..Library.Flags["TheBronx3/SelectItemToPurchase"],
+                            Duration = 5,
+                            Icon = "116339777575852",
+                            IconColor = Color3.fromRGB(52, 255, 164)
+                        })
 
-                        Purchase_Items:Dropdown({Name = "Select Items", Flag = "SelectItems_ToPurchase", Items = {"Chains", "Cars", "Clothes", "Watches", "Shoes", "Hats", "Glasses"}, MaxSize = 150, Multi = true, Default = {"Clothes", "Shoes"}})
+                        local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
+                        local LookVector = HumanoidRootPart.CFrame.LookVector
 
-                        Purchase_Items:Button({Name = "Purchase Items", Callback = function()
-                            if table.find(Library.Flags.SelectItems_ToPurchase, 'Chains') then
-                                for Index, Value in ReplicatedStorage.Customization.Chains:GetChildren() do
-                                    ReplicatedStorage:WaitForChild('RemoteEvents'):WaitForChild('VehicleCustomization'):FireServer('Window Tint', 9e9)
-
-                                    task.wait(.1)
-
-                                    local Event = ReplicatedStorage.RemoteEvents.PurchaseItem
-                                    
-                                    Event:FireServer(
-                                        "Chains",
-                                        Value.Name
-                                    )
-                                end
-                            end
-
-                            if table.find(Library.Flags.SelectItems_ToPurchase, 'Cars') then
-                                for Index, Value in LocalPlayer.PlayerScripts["Client.Initializer"].Assets.UI.DealershipUI.Selector.Tabs.ScrollingFrame:GetChildren() do
-                                    ReplicatedStorage:WaitForChild('RemoteEvents'):WaitForChild('VehicleCustomization'):FireServer('Window Tint', 9e9)
-
-                                    task.wait(.1)
-
-                                    ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("RPC"):FireServer(buffer.fromstring("\001"), "Purchase", Value.Name)
-                                end
-                            end
-
-                            if table.find(Library.Flags.SelectItems_ToPurchase, 'Watches') then
-                                for Index, Value in ReplicatedStorage.Customization.Watches:GetChildren() do
-                                    ReplicatedStorage:WaitForChild('RemoteEvents'):WaitForChild('VehicleCustomization'):FireServer('Window Tint', 9e9)
-
-                                    task.wait(.1)
-
-                                    local Event = ReplicatedStorage.RemoteEvents.PurchaseItem
-                                    
-                                    Event:FireServer(
-                                        "Watches",
-                                        Value.Name
-                                    )
-                                end
-                            end
-
-                            if table.find(Library.Flags.SelectItems_ToPurchase, 'Clothes') then
-                                for Index, Value in getgc(true) do
-                                    if type(Value) == 'table' then
-                                        if rawget(Value, "BlackTee") or rawget(Value, "BlackCottonWreathJoggers") then
-                                            for Index, _ in Value do
-                                                local Event = ReplicatedStorage.RemoteEvents.PurchaseItem
-                                            
-                                                Event:FireServer(
-                                                    rawget(Value, "BlackTee") and "Shirts" or "Pants",
-                                                    Index
-                                                )
-
-                                                task.wait(0.05)
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-
-                            if table.find(Library.Flags.SelectItems_ToPurchase, 'Glasses') then
-                                for Index, Value in getgc(true) do
-                                    if type(Value) == 'table' then
-                                        if rawget(Value, "Gold Cartier Shades") then
-                                            table.foreach(Value, function(Index, _)
-                                                local Event = ReplicatedStorage.RemoteEvents.PurchaseItem
-                                            
-                                                Event:FireServer(
-                                                    'Glasses',
-                                                    Index
-                                                )
-                                            end)
-                                        end
-                                    end
-                                end
-                            end
-
-                            if table.find(Library.Flags.SelectItems_ToPurchase, 'Hats') then
-                                for Index, Value in getgc(true) do
-                                    if type(Value) == 'table' then
-                                        if rawget(Value, "Beanie") then
-                                            table.foreach(Value, function(Index, _)
-                                                local Event = ReplicatedStorage.RemoteEvents.PurchaseItem
-                                            
-                                                Event:FireServer(
-                                                    'Hats',
-                                                    Index
-                                                )
-                                            end)
-                                        end
-                                    end
-                                end
-                            end
-
-                            if table.find(Library.Flags.SelectItems_ToPurchase, 'Shoes') then
-                                for Index, Value in getgc(true) do
-                                    if type(Value) == 'table' then
-                                        if rawget(Value, "AF1s") then
-                                            for _Index, _Value in Value do
-                                                for i,v in _Value do
-                                                    if type(v) == 'table' then
-                                                        for x,d in v do
-                                                            if not string.find(d, "rbx") then
-                                                                ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("PurchaseItem"):FireServer("Shoes", _Index, d)
-                                                                task.wait(.05)
-                                                            end
-                                                        end
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end})
-                    end]]
+                        Config:Teleport(CFrame.new(OldCFrame.Position, OldCFrame.Position + LookVector))
+                    end)})
                 end
 
-                --[[do -- Teleport Settings
-                    local Teleport_Timing_Settings = Subpages.Player:Section({Name = "Teleportation Timing Settings", Icon = Library:GetImage("HourglassEmpty"), Side = 2})
+                do -- House
+                    local HouseTeleportSection = Subpages["Teleports"]:Section({Name = "House Teleports", Icon = Library:GetImage("Home"), Side = 2})
 
-                    Teleport_Timing_Settings:Slider({Name = "Select Teleport Timing", Suffix = "s", Min = 0.1, Max = 0.3, Default = 0.2, Decimals = 0.01, Callback = function(State)
-                        Config.South_Bronx.Teleport_Time = State
+                    local ____Dropdown = HouseTeleportSection:Dropdown({Name = "Select House", Options = {}, Flag = "TheBronx3/SelectHouse", Default = nil, MaxSize = 175, Multi = false})
+
+                    HouseTeleportSection:Button({Name = "Teleport To House", Callback = function()
+                        for Index, Value in Workspace.HomeDoorSS:GetChildren() do
+                            if Value:FindFirstChild("Owner") and Value.Owner.Value == tostring(Library.Flags["TheBronx3/SelectHouse"]:gsub("'s House", "")) then
+                                Config:Teleport(Value.HouseArrestTeleport.CFrame)
+
+                                break
+                            end
+                        end
                     end})
 
-                    Teleport_Timing_Settings:Label("This will only effect the 'exempt' teleport method, you don't have to change this but if you are having slow teleports, consider changing it and see what value works best for that ping.")
-                end]]
+                    do -- refresh houses
+                        local Houses = {};
+
+                        for Index, Value in Workspace.HomeDoorSS:GetChildren() do
+                            if Value:FindFirstChild("Owner") and Value.Owner.Value ~= "None" then
+                                table.insert(Houses, Value.Owner.Value.."'s House")
+                            end
+                        end
+
+                        ____Dropdown:Refresh(Houses)
+                    end
+
+                    HouseTeleportSection:Button({Name = "Refresh List", Callback = function()
+                        local Houses = {};
+
+                        for Index, Value in Workspace.HomeDoorSS:GetChildren() do
+                            if Value:FindFirstChild("Owner") and Value.Owner.Value ~= "None" then
+                                table.insert(Houses, Value.Owner.Value.."'s House")
+                            end
+                        end
+
+                        ____Dropdown:Refresh(Houses)
+                    end})
+                end
             end
 
-            do -- Vehicle
-                local Information_Section = Subpages.Vehicles:Section({Name = "Information", Icon = Library:GetImage("Info"), Side = 1})
+            do -- Vehicles
+                do -- Modifications
+                    local Information_Section = Subpages.Vehicles:Section({Name = "Information", Icon = Library:GetImage("Info"), Side = 1})
 
-                Information_Section:Label("These mods can be VERY powerful and make your car break / go through the map.")
+                    Information_Section:Label("These mods can be VERY powerful and make your car break / go through the map.")
 
-                local VehicleSection = Subpages.Vehicles:Section({Name = "Vehicle Modifications", Icon = Library:GetImage("Tune"), Side = 1})
+                    local VehicleSection = Subpages.Vehicles:Section({Name = "Vehicle Modifications", Icon = Library:GetImage("Tune"), Side = 1})
 
-                VehicleSection:Toggle({Name = "Vehicle Fly Enabled", Flag = "SouthBronx/VehicleModifications/VehicleFly/Enabled", Callback = function(State)
-                    if State and LocalPlayer.Character.Humanoid.SeatPart and LocalPlayer.Character.Humanoid.SeatPart.Name == "DriveSeat" then
-                        if FLYING then
-                            NOFLY()
+                    VehicleSection:Toggle({Name = "Velocity Speed Enabled", Flag = "VelocitySpeed_Enabled", Default = false, Callback = function(State)
+                        Config.VehicleModifications.SpeedEnabled = State
+                    end})
+
+                    VehicleSection:Slider({Name = "Speed Value", Min = 1, Max = 25, Default = 5, Flag = "VelocitySpeed_Value", Suffix = "s/ps", Decimals = 1, Callback = function(State)
+                        Config.VehicleModifications.SpeedValue = State/1000
+                    end})
+
+                    VehicleSection:Toggle({Name = "Break Velocity Enabled", Flag = "BreakVelocity_Enabled", Default = false, Callback = function(State)
+                        Config.VehicleModifications.BreakEnabled = State
+                    end})
+
+                    VehicleSection:Slider({Name = "Break Value", Min = 10, Max = 300, Default = 50, Suffix = "s/ps", Flag = "BreakVelocity_Value", Decimals = 1, Callback = function(State)
+                        Config.VehicleModifications.BreakValue = State/1000
+                    end})
+
+                    VehicleSection:Toggle({Name = "Instant Break Enabled", Flag = "InstantBreak_Enabled", Default = false, Callback = function(State)
+                        Config.VehicleModifications.InstantStop = State
+                    end})
+
+                    local Label = VehicleSection:Label("Instant Break Key")
+                    
+                    local Key; Key = Label:Keybind({Name = "Instant Break", Flag = "InstantBreak_Bind", Default = Enum.KeyCode.V, Mode = "hold", Callback = LPH_NO_VIRTUALIZE(function()
+                        if Key then 
+                            Config.VehicleModifications.InstantStopBind = Enum.KeyCode[tostring(select(2, Key:Get()):gsub("Enum.KeyCode.", ""))]
                         end
+                    end)})
+                end
 
-                        sFLY(true)
-                    else
-                        if FLYING then
-                            NOFLY()
-                        end
-                    end
-                end})
+                do -- Spawner
+                    local Vehicle_Spawner = Subpages["Vehicles"]:Section({Name = "Vehicle Spawner", Icon = Library:GetImage("CarInfo"), Side = 2})
 
-                VehicleSection:Slider({Name = "Vehicly Fly Speed", Min = 10, Max = 500, Default = 50, Flag = "SouthBronx/VehicleModifications/VehicleFly/Value", Suffix = "s/ps", Decimals = 1, Callback = function(State)
-                    vehicleflyspeed = State/50
-                end})
-
-                VehicleSection:Toggle({Name = "Velocity Speed Enabled", Flag = "VelocitySpeed_Enabled", Default = false, Callback = function(State)
-                    Config.VehicleModifications.SpeedEnabled = State
-                end})
-
-                VehicleSection:Slider({Name = "Speed Value", Min = 1, Max = 25, Default = 5, Flag = "VelocitySpeed_Value", Suffix = "s/ps", Decimals = 1, Callback = function(State)
-                    Config.VehicleModifications.SpeedValue = State/1000
-                end})
-
-                VehicleSection:Toggle({Name = "Break Velocity Enabled", Flag = "BreakVelocity_Enabled", Default = false, Callback = function(State)
-                    Config.VehicleModifications.BreakEnabled = State
-                end})
-
-                VehicleSection:Slider({Name = "Break Value", Min = 10, Max = 300, Default = 50, Suffix = "s/ps", Flag = "BreakVelocity_Value", Decimals = 1, Callback = function(State)
-                    Config.VehicleModifications.BreakValue = State/1000
-                end})
-
-                VehicleSection:Toggle({Name = "Instant Break Enabled", Flag = "InstantBreak_Enabled", Default = false, Callback = function(State)
-                    Config.VehicleModifications.InstantStop = State
-                end})
-
-                local Label = VehicleSection:Label("Instant Break Key")
+                    local Cars = {"1500CHEV", "2020 Mercedes E63s AMG", "2023CTahoe", "C63 S AMG", "Lambo", "2023BMW", "WideBody Demon", "Escalade", "Kia 5K GT", "2023Urus", "MayBach Truck", "Chevrolet Caprice", "MR BLACKWING CTS", "2003 TrailBZ", "Impala BigWheel", "2017SuburbanChev", "Bronco", "1999Toyota", "DirtBike", "GT500", "2003 Chevrolet Suburban", "2014 C7 Sti", "Claren", "BulletProofTahoe", "DA BIG GMCEE", "ATV", "2005 Dodge Magnum R/T", "Chevrolet Tahoe", "2005Mitsubishi", "Blazer", "Bentley SS", "Lincoln W Donks", "HondaCivic", "1990Tahoe", "Van", "2023 RAM® 1500 TRX", "392 CHALLY", "Q50S", "BigWheel Cadillac DTS", "X6M BMW", "2022CadeeLac Escalade", "C8 ZR1", "2022Porsche", "2500HD DodgeRam", "BMW M3", "2020 Rolls-Royce", "DodgeChargerSRT", "Scat", "DA G8", "LTZ HQ", "Range Rover Velar", "Hellcat Jeep", "Monte Carlo SS", "1994 Chevrolet Impala SS", "2010Escalade", "Q60", "2017Camaro", "Hunda Brr", "Sideshow Chevy", "M8 CS", "BansheeYamaha", "2013 Charger SRT8", "1970 Plymouth Roadrunner", "RaptorF150", "DodgeDurang SRT", "NissanGTR", "1969 Camaro Z/28", "MR PublicBus", "C63 E AMG", "TrackHawk", "Nissan Skyline", "Maserati Ghibli", "BIG 4WHEELER", "DodgeChallenger", "Rolls Royce", "Chrysler 300 Hellcat", "Camaro", "Gle 53", "G65 AMG", "MR 4Runner", "Mercedes Sprinter Bus", "Hellcat", "Chevrolet Silvardo", "CTS-V"}
+                    table.sort(Cars)
+                    
+                    Vehicle_Spawner:Dropdown({Name = "Select Vehicle", Flag = "TheBronx3/VehicleSpawner/SelectVehicle", Items = Cars, MaxSize = 200})
                 
-                local Key; Key = Label:Keybind({Name = "Instant Break", Flag = "InstantBreak_Bind", Default = Enum.KeyCode.V, Mode = "hold", Callback = LPH_NO_VIRTUALIZE(function()
-                    if Key then 
-                        Config.VehicleModifications.InstantStopBind = Enum.KeyCode[tostring(select(2, Key:Get()):gsub("Enum.KeyCode.", ""))]
-                    end
-                end)})
-
-                local Vehicle_Spawner = Subpages.Vehicles:Section({Name = "Vehicle Spawner", Icon = Library:GetImage("CarInfo"), Side = 2})
-
-                local SelectVehicleDropdown = Vehicle_Spawner:Dropdown({Name = "Select Vehicle", Flag = "SelectVehicle_Spawner", Items = {}, Multi = false, MaxSize = 200})
-
-                Vehicle_Spawner:Button({Name = "Spawn Vehicle", Callback = function()
-                    if Library.Flags.SelectVehicle_Spawner then
-                        ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("RPC"):FireServer(buffer.fromstring("\001"), "Spawn", Library.Flags.SelectVehicle_Spawner)
+                    Vehicle_Spawner:Button({Name = "Spawn Vehicle", Tooltip = "This will spawn your vehicle, you must own it!", Callback = function()
+                        if not Library.Flags["TheBronx3/VehicleSpawner/SelectVehicle"] then return end
+                        if not replicatesignal then
+                            return Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "Your executor doesnt support 'replicatesignal' , get a better executor!",
+                                Duration = 10,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                        end
 
                         local Old_CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
 
+                        Config:Teleport(Workspace.CARDealerP.CFrame)
+
+                        repeat RunService.Heartbeat:Wait() until LocalPlayer.PlayerGui:FindFirstChild("GunGui")
+                        task.wait(1)
+
+                        replicatesignal(LocalPlayer.PlayerGui.GunGui.Holder.ScrollingFrame[Library.Flags["TheBronx3/VehicleSpawner/SelectVehicle"]].MouseButton1Down,1,1)
+
+                        task.wait(0.5)
+
+                        if LocalPlayer.PlayerGui.GunGui.Holder.Buy.Text:lower() == "buy" then
+                            return Library:Notification({
+                                Name = "Valary.gg | Error!",
+                                Description = "You don't own this car!",
+                                Duration = 5,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+                        end
+
+                        replicatesignal(LocalPlayer.PlayerGui.GunGui.Holder.Buy.MouseButton1Down, 1, 1)
+
                         local MyCar;
 
-                        local Abort = false
-                        
-                        if Library.Flags["SouthBronx/VehicleSpawner/GetIntoVehicle"] then
-                            local Cars_ChildAdded; Cars_ChildAdded = Workspace.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function(Child)
+                        if Library.Flags["TheBronx3/VehicleSpawner/GetIntoVehicle"] then
+                            local CivCars_ChildAdded; CivCars_ChildAdded = Workspace.CivCars.ChildAdded:Connect(LPH_NO_VIRTUALIZE(function(Child)
+                                repeat RunService.Heartbeat:Wait() until Child:FindFirstChild("Owner")
                                 task.wait(.1)
-
-                                if Child.Name:find(LocalPlayer.Name) then
+                                if Child:FindFirstChild("Owner").Value == LocalPlayer.Name then
                                     Child:WaitForChild("DriveSeat");task.wait(.5)
-
-                                    Config:Teleport(Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)).DriveSeat.CFrame + Vector3.new(0,5,0))
-
-                                    task.wait(2.5)
-
-                                    if (LocalPlayer.Character.HumanoidRootPart.Position - Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):FindFirstChildWhichIsA("Part", true).Position).Magnitude > 25 then
-                                        Abort = true
-
-                                        Library:Notification({
-                                            Name = "Valary.gg | Vehicle Error!",
-                                            Description = "Failed to teleport to your vehicle!",
-                                            Duration = 5,
-                                            Icon = "97118059177470",
-                                            IconColor = Color3.fromRGB(255, 120, 120)
-                                        })
-                                    end
-
-                                    if not Abort then
-                                        fireproximityprompt(Child:WaitForChild("DriveSeat"):FindFirstChildWhichIsA("ProximityPrompt", true))
-                                        MyCar = Child
-                                        Cars_ChildAdded:Disconnect()
-                                        Cars_ChildAdded = nil
-                                    end
-
-                                    task.wait(.1)
+                                    Child:WaitForChild("DriveSeat"):Sit(LocalPlayer.Character.Humanoid)
+                                    MyCar = Child
+                                    CivCars_ChildAdded:Disconnect()
+                                    CivCars_ChildAdded = nil
                                 end
                             end))
                         end
 
-                        if Library.Flags["SouthBronx/VehicleSpawner/GetIntoVehicle"] and Library.Flags["SouthBronx/VehicleSpawner/BringVehicle"] and not Abort then
+                        if Library.Flags["TheBronx3/VehicleSpawner/GetIntoVehicle"] and Library.Flags["TheBronx3/VehicleSpawner/BringVehicle"] then
                             repeat RunService.Heartbeat:Wait() until LocalPlayer.Character.Humanoid.SeatPart and MyCar
-
-                            task.wait(1)
 
                             if not MyCar.PrimaryPart then
                                 MyCar.PrimaryPart = MyCar.Body:FindFirstChild("#Weight", true)
@@ -17537,480 +15129,57 @@ do
 
                             MyCar:SetPrimaryPartCFrame(Old_CFrame+Vector3.new(0,5,0))
                         end
-                    end
-                end})
+                    end})
 
-                Vehicle_Spawner:Button({Name = "Teleport To Vehicle", Callback = function()
-                    if Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)) then
-                        Config:Teleport(Workspace:FindFirstChild(string.format("%s's Car", LocalPlayer.Name)):FindFirstChildWhichIsA("Part", true).CFrame + Vector3.new(0,5,0))
+                    Vehicle_Spawner:Toggle({Name = "Automatically Get Into Vehicle", Flag = "TheBronx3/VehicleSpawner/GetIntoVehicle", Tooltip = "This make you automatically get in the driver seat."})
+
+                    Vehicle_Spawner:Toggle({Name = "Automatically Bring Vehicle", Flag = "TheBronx3/VehicleSpawner/BringVehicle", Tooltip = "You must have get into vehicle enabled for this to work."})
+                end
+
+                do -- Mobile Garage
+                    local Mobile_Garage = Subpages["Vehicles"]:Section({Name = "Mobile Garage", Icon = Library:GetImage("CarGear"), Side = 2})
+                    if MarketplaceService:UserOwnsGamePassAsync(LocalPlayer.UserId, 1061802329) then
+                        Mobile_Garage:Label("Select Color"):Colorpicker({
+                            Name = "Select Car Color",
+                            Flag = "TheBronx3/SelectCustomCarColor",
+                            Default = Color3.fromRGB(255,255,255),
+                            Alpha = 0
+                        })
+
+                        Mobile_Garage:Button({Name = "Apply Color", Tooltip = "Your car must be spawned, it will cost $100.", Callback = function()
+                            if Library.Flags["TheBronx3/SelectCustomCarColor"] then
+                                ReplicatedStorage:WaitForChild("Garage"):InvokeServer(Library.Flags["TheBronx3/SelectCustomCarColor"], "Body")
+                            end
+                        end})
                     else
-                        Library:Notification({
-                            Name = "Valary.gg | Error",
-                            Description = "Could not find your car!",
-                            Duration = 7.5,
-                        })
-                    end
-                end})
+                        local colors = {
+                            ["Pink"] = Color3.fromRGB(250,124,153),
+                            ["Orange"] = Color3.fromRGB(220,115,10),
+                            ["Gray"] = Color3.fromRGB(74,74,74),
+                            ["Dark Red"] = Color3.fromRGB(86,36,36),
+                            ["Blue"] = Color3.fromRGB(18,26,149),
+                            ["Black"] = Color3.fromRGB(0,0,0),
+                            ["Green"] = Color3.fromRGB(64,152,78),
+                            ["Red"] = Color3.fromRGB(194,0,0),
+                            ["Purple"] = Color3.fromRGB(39,21,66),
+                            ["Yellow"] = Color3.fromRGB(255,191,0),
+                            ["Lime"] = Color3.fromRGB(139,190,0),
+                            ["Brown"] = Color3.fromRGB(86,36,36),
+                        } local color_names = {};
 
-                Vehicle_Spawner:Button({Name = "Refresh List", Callback = function()
-                    local _Cars = {}
+                        for Index, Value in colors do
+                            table.insert(color_names, Index)
+                        end; table.sort(color_names)
 
-                    for Index, Value in LocalPlayer.PlayerScripts["Client.Initializer"].Assets.UI.DealershipUI.Selector.Tabs.ScrollingFrame:GetChildren() do
-                        if not Value:IsA("TextButton") or Value.Name == "Template" then
-                            continue
-                        end
-                        
-                        --do
-                            local Data = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("GetStat"):InvokeServer("Vehicles", Value.Name)
+                        Mobile_Garage:Dropdown({Name = "Select Color", Items = color_names, Flag = "TheBronx3/SelectColorGarage", MaxSize = 175})
 
-                            if Data then
-                                table.insert(_Cars, Value.Name)
-
-                                --break;
+                        Mobile_Garage:Button({Name = "Apply Color", Tooltip = "Your car must be spawned, it will cost $100.", Callback = function()
+                            if Library.Flags["TheBronx3/SelectColorGarage"] and colors[Library.Flags["TheBronx3/SelectColorGarage"]] then
+                                ReplicatedStorage:WaitForChild("Garage"):InvokeServer(colors[Library.Flags["TheBronx3/SelectColorGarage"]], "Body")
                             end
-                        --end
+                        end})
                     end
-
-                    SelectVehicleDropdown:Refresh(_Cars)
-                end})
-
-                Vehicle_Spawner = Subpages.Vehicles:Section({Name = "Vehicle Spawner Settings", Icon = Library:GetImage("CarGear"), Side = 2})
-
-                Vehicle_Spawner:Toggle({Name = "Automatically Get Into Vehicle", Flag = "SouthBronx/VehicleSpawner/GetIntoVehicle", Tooltip = "This make you automatically get in the driver seat."})
-
-                Vehicle_Spawner:Toggle({Name = "Automatically Bring Vehicle", Flag = "SouthBronx/VehicleSpawner/BringVehicle", Tooltip = "You must have get into vehicle enabled for this to work."})
-
-                -- Refresh Vehicles
-                    local _Cars = {}
-
-                    for Index, Value in LocalPlayer.PlayerScripts["Client.Initializer"].Assets.UI.DealershipUI.Selector.Tabs.ScrollingFrame:GetChildren() do
-                        if not Value:IsA("TextButton") or Value.Name == "Template" then
-                            continue
-                        end
-                        
-                        --do
-                            local Data = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("GetStat"):InvokeServer("Vehicles", Value.Name)
-
-                            if Data then
-                                table.insert(_Cars, Value.Name)
-
-                                --break;
-                            end
-                        --end
-                    end
-
-                    SelectVehicleDropdown:Refresh(_Cars)
-
-                    --[[task.spawn(LPH_NO_VIRTUALIZE(function()
-                        while task.wait(1) do
-                            --pcall(function()
-                                for Index, Value in LocalPlayer.PlayerScripts["Client.Initializer"].Assets.UI.DealershipUI.Selector.Tabs.ScrollingFrame:GetChildren() do
-                                    if not Value:IsA("TextButton") or Value.Name == "Template" then
-                                        continue
-                                    end
-                                    
-                                    --do
-                                        local Data = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("GetStat"):InvokeServer("Vehicles", Value.Name)
-
-                                        if Data and not table.find(_Cars, Value.Name) then
-                                            print(Value.Name)
-                                            Vehicle_Spawner:AddOption(Value.Name)
-                                            table.insert(_Cars, Value.Name)
-
-                                            --break;
-                                        end
-                                    --end
-                                end
-                            --end)
-                        end 
-                    end))]]
-                --
-            end
-
-            do -- Money
-                local Information_Section = Subpages.Money:Section({Name = "Information", Icon = Library:GetImage("Info"), Side = 1})
-
-                Information_Section:Label("If you gain more than $500,000 in one session, the script will deposit $500,000 into your ATM for security reasons.", "Left")
-
-                local Automatic_Farming_Utilites = Subpages.Money:Section({Name = "Automated Utilities", Icon =  Library:GetImage("MoneyBag"), Side = 1})
-
-                local FarmCards_Toggle, FarmChips_Toggle, FarmBoxes_Toggle
-
-                FarmCards_Toggle = Automatic_Farming_Utilites:Toggle({Name = "Auto-Farm Cards", Flag = "Auto_Farm_Cards", Default = false, Callback = function(State)
-                    if FarmChips_Toggle and FarmChips_Toggle:Get() then
-                        FarmChips_Toggle:Set(false)
-                    end
-
-                    if FarmMarshmallows_Toggle and FarmMarshmallows_Toggle:Get() then
-                        FarmMarshmallows_Toggle:Set(false)
-                    end
-
-                    if FarmBoxes_Toggle and FarmBoxes_Toggle:Get() then
-                        FarmBoxes_Toggle:Set(false)
-                    end
-
-                    Config.South_Bronx.FarmingUtilities.CardFarm = State
-                    if State then Start_CardFarm() else Stop_CardFarm() end
-                end})
-
-                FarmChips_Toggle = Automatic_Farming_Utilites:Toggle({Name = "Auto-Farm Chips", Flag = "Auto_Farm_Chips", Default = false, Callback = function(State)
-                    if FarmCards_Toggle and FarmCards_Toggle:Get() then
-                        FarmCards_Toggle:Set(false)
-                    end
-
-                    if FarmMarshmallows_Toggle and FarmMarshmallows_Toggle:Get() then
-                        FarmMarshmallows_Toggle:Set(false)
-                    end
-
-                    if FarmBoxes_Toggle and FarmBoxes_Toggle:Get() then
-                        FarmBoxes_Toggle:Set(false)
-                    end
-
-                    Config.South_Bronx.FarmingUtilities.ChipFarm = State
-                    if State then Start_ChipFarm() else Stop_ChipFarm() end
-                end})
-
-                FarmMarshmallows_Toggle = nil; FarmMarshmallows_Toggle = Automatic_Farming_Utilites:Toggle({Name = "Auto-Farm Marshmallows", Flag = "Auto_Farm_Marshmallows", Default = false, Callback = function(State)
-                    if FarmCards_Toggle and FarmCards_Toggle:Get() then
-                        FarmCards_Toggle:Set(false)
-                    end
-
-                    if FarmChips_Toggle and FarmChips_Toggle:Get() then
-                        FarmChips_Toggle:Set(false)
-                    end
-
-                    if FarmBoxes_Toggle and FarmBoxes_Toggle:Get() then
-                        FarmBoxes_Toggle:Set(false)
-                    end
-
-                    Config.South_Bronx.FarmingUtilities.MarshmallowFarm = State
-                    if State then Start_MarshmallowFarm() else Stop_MarshmallowFarm() end
-                end})
-
-                local MarshmallowSlider; MarshmallowSlider = Automatic_Farming_Utilites:Slider({Name = "Marshmallow Amount - $4750", Min = 1, Max = 50, Default = 25, Flag = "Marshmallow_Amount_AutoFarm", Decimals = 1, Callback = function(State)
-                    if MarshmallowSlider then MarshmallowSlider:ChangeText(string.format("Marshmallow Amount - $%s", (State * 190))) end
-                    Config.South_Bronx.FarmingUtilities.MarshmallowIncrement = State
-                end})
-
-                FarmBoxes_Toggle = Automatic_Farming_Utilites:Toggle({Name = "Auto-Farm Boxes", Tooltip = "Make sure to have the j*b before enabling this.", Flag = "Auto_Farm_Boxes", Default = false, Callback = function(State)
-                    if FarmCards_Toggle and FarmCards_Toggle:Get() then
-                        FarmCards_Toggle:Set(false)
-                    end
-
-                    if FarmChips_Toggle and FarmChips_Toggle:Get() then
-                        FarmChips_Toggle:Set(false)
-                    end
-
-                    if FarmMarshmallows_Toggle and FarmMarshmallows_Toggle:Get() then
-                        FarmMarshmallows_Toggle:Set(false)
-                    end
-
-                    Config.South_Bronx.FarmingUtilities.BoxFarm = State
-                    if State then Start_BoxFarm() else Stop_BoxFarm() end
-                end})
-
-                local AutoFarm_Webhook = Subpages.Money:Section({Name = "Auto Farm Webhook", Icon = Library:GetImage("CellTower"), Side = 1})
-
-                AutoFarm_Webhook:Toggle({Name = "Enabled", Flags = "SouthBronx/AutoFarm/SendWebhook", Callback = function(State)
-                    Config.South_Bronx.FarmingUtilities.Webhook_Enabled = State
-                end})
-
-                AutoFarm_Webhook:Toggle({Name = "Log South Bronx Name Instead", Flags = "SouthBronx/AutoFarm/LogSbName", Tooltip = "This won't log your user, but log your south bronx name.", Callback = function(State)
-                    Config.South_Bronx.FarmingUtilities.Log_SouthBronx_Name = State
-                end})
-
-                AutoFarm_Webhook:Textbox({Name = "Enter Webhook Link", Placeholder = "https://discord.com/api/webhooks/1408953037527060571/1TOvjUGQlzKOM8GB2LlEi2OusGmscVBB-fjB82GJDKvHlA1yBF_mK71V5hKC-_zgPdpO", Flag = "SouthBronx/AutoFarm/Webhook", Callback = function(State)
-                    Config.South_Bronx.FarmingUtilities.Webhook_URL = State
-                end})
-
-                AutoFarm_Webhook:Button({Name = "Test Webhook", Callback = function(State)
-                    local Success, Error = pcall(function()
-                        return game:HttpGet(Config.South_Bronx.FarmingUtilities.Webhook_URL)
-                    end)
-
-                    if not Success then
-                        Library:Notification({
-                            Name = "Valary.gg | Webhook",
-                            Description = "This link is invalid. Please fix it.",
-                            Duration = 10,
-                            Icon = "97118059177470",
-                            IconColor = Color3.fromRGB(255, 120, 120)
-                        })
-
-                        return
-                    end
-
-                    Config:SendWebhook()
-                end})
-
-                local Manual_Farming_Utilities = Subpages.Money:Section({Name = "Manual Utilities", Icon = Library:GetImage("AutoManifacturing"), Side = 2})
-
-                Manual_Farming_Utilities:Slider({Name = "Amount Of Vehicles To Rob", Min = 1, Max = 5, Default = 2, Flag = "Amount_OfVehicles", Decimals = 1})
-
-                local StartRobbing, HumanoidDied;
-
-                local Button; Button = Manual_Farming_Utilities:Button({Name = "Start - Manually Steal Loot From Vehicles", Callback = function()
-                    if StartRobbing then
-                        if coroutine.status(StartRobbing) == "suspended" then
-                            task.cancel(StartRobbing)
-                            StartRobbing = nil
-                        end
-
-                        Button:SetText("Start - Manually Steal Loot From Vehicles")
-
-                        return Library:Notification({
-                            Name = "Valary.gg | Robbing",
-                            Description = "Cancelled Operation!",
-                            Duration = 7.5,
-                        })
-                    end
-
-                    if not LocalPlayer.Character:FindFirstChild("Backpack") then
-                        return Library:Notification({
-                            Name = "Valary.gg | Robbing",
-                            Description = "You don't have a backpack!",
-                            Duration = 7.5,
-                        })
-                    end
-
-                    local Amount = Library.Flags.Amount_OfVehicles
-
-                    local Cars = {}
-
-                    for Index, Value in Workspace.Folders.RobbableCars:GetChildren() do
-                        if Value.WindowBreak.Transparency == 0.550000011920929 then
-                            if #Cars >= Amount then continue end
-                            table.insert(Cars, Value)
-                        end
-                    end
-
-                    if #Cars == 0 then
-                        return Library:Notification({
-                            Name = "Valary.gg | Robbing",
-                            Description = "No cars are able to be robbed.",
-                            Duration = 5,
-                        })
-                    end
-
-                    if #Cars<tonumber(Amount) then
-                        Library:Notification({
-                            Name = "Valary.gg | Robbing",
-                            Description = string.format("%s Cars can't be robbed, defaulting to %s", tostring(Amount), tostring(#Cars)),
-                            Duration = 5,
-                        })
-                    end
-
-                    HumanoidDied = LocalPlayer.Character.Humanoid.Died:Connect(function()
-                        if StartRobbing then
-                            if coroutine.status(StartRobbing) == "suspended" then
-                                task.cancel(StartRobbing)
-                                Button:SetText("Start - Manually Steal Loot From Vehicles")
-                            end
-                        end
-
-                        HumanoidDied:Disconnect()
-                        HumanoidDied = nil
-                    end)
-
-                    StartRobbing = task.spawn(function()
-                        Button:SetText("Stop - Manually Steal Loot From Vehicles")
-
-                        if not LocalPlayer.Backpack:FindFirstChild("Crowbar") and not LocalPlayer.Character:FindFirstChild("Crowbar") then
-                            Config:Teleport(Gun_Locations["Crowbar"], true)
-
-                            repeat task.wait() until Workspace.Folders.PromptPurchases:FindFirstChild("Crowbar")
-
-                            task.wait(1)
-
-                            fireproximityprompt(Workspace.Folders:FindFirstChild("PromptPurchases")["Crowbar"].proxprompt:FindFirstChildOfClass("ProximityPrompt"))
-
-                            task.wait(1)
-
-                            if not LocalPlayer.Backpack:FindFirstChild("Crowbar") and not LocalPlayer.Character:FindFirstChild("Crowbar") then
-                                return Library:Notification({
-                                    Name = "Valary.gg | Error",
-                                    Description = "Couldn't get a crowbar!",
-                                    Duration = 7.5,
-                                })
-                            end
-                        end
-
-                        for Index, Value in Cars do
-                            Config:Teleport(Value.WindowBreak.CFrame, true)
-
-                            if not LocalPlayer.Character:FindFirstChild("Crowbar") then
-                                LocalPlayer.Character.Humanoid:UnequipTools()
-                                task.wait(0.25)
-                                LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Crowbar"))
-                            end
-
-                            repeat task.wait(.1) fireproximityprompt(Value.WindowBreak.Attachment.ProximityPrompt) until
-                            LocalPlayer.PlayerGui:FindFirstChild("SearchCarUI")
-
-                            repeat task.wait() until not LocalPlayer.PlayerGui:FindFirstChild("SearchCarUI")
-
-                            Config:Teleport(CFrame.new(1014, 4, -348), true)
-
-                            task.wait(.5)
-
-                            Workspace.Folders.NPCs.RobberyManager.UpperTorso.ProximityPrompt.HoldDuration = 0
-                            fireproximityprompt(Workspace.Folders.NPCs.RobberyManager.UpperTorso.ProximityPrompt)
-                            task.wait(.25)
-
-                            if Index == #Cars then
-                                Button:SetText("Start - Manually Steal Loot From Vehicles")
-                                Library:Notification({
-                                    Name = "Valary.gg | Robbing",
-                                    Description = "Finished Robbing Vehicles!",
-                                    Duration = 7.5,
-                                })
-                            end
-                        end
-
-                        HumanoidDied:Disconnect()
-
-                        StartRobbing = nil
-                        HumanoidDied = nil
-                    end)
-                end})
-
-                local Anti_Idle_Section = Subpages.Money:Section({Name = "Anti-Idle Information", Icon = Library:GetImage("ZonePersonUrgent"), Side = 2})
-
-                Anti_Idle_Section:Label("Don't worry, valary has already bypassed idle checks for you!")
-
-                --[[AutoBuyGunToggle = Anti_Idle_Section:Toggle({Name = "Auto-Buy Gun If Death While Auto-Farming", Flag = "SouthBronx/FarmingUtilities/Auto-Buy-Gun", Callback = function(State)
-                    Config.South_Bronx.FarmingUtilities.AutoBuyGun = State
-                end})]]
-
-                Anti_Idle_Section:Toggle({Name = "Auto-Buy Mask If Death While Auto-Farming", Flag = "SouthBronx/FarmingUtilities/Auto-Buy-Mask", Callback = function(State)
-                    Config.South_Bronx.FarmingUtilities.AutoBuyMask = State
-                end})
-
-                local AutoFarm_Stats = Subpages.Money:Section({Name = "Auto Farm Stats Information", Icon = Library:GetImage("QueryStats"), Side = 2})
-
-                local AutoFarm_TimeElapsed = AutoFarm_Stats:Label("Auto Farm Time Elapsed | 0h, 0m, 0s")
-
-                local Money_Gained_Label = AutoFarm_Stats:Label("Money Gained | $0")
-                
-                task.spawn(LPH_NO_VIRTUALIZE(function()
-                    while task.wait(1) do
-                        if Config.South_Bronx.FarmingUtilities.MarshmallowFarm or Config.South_Bronx.FarmingUtilities.CardFarm or Config.South_Bronx.FarmingUtilities.ChipFarm or Config.South_Bronx.FarmingUtilities.BoxFarm then
-                            Config.South_Bronx.Farm_Data.Time_Elapsed += 1
-                        end
-
-                        AutoFarm_TimeElapsed:SetText("Auto Farm Time Elapsed | "..convertSeconds(Config.South_Bronx.Farm_Data.Time_Elapsed))
-
-                        pcall(function()
-                            local New_Balance = LocalPlayer.PlayerGui.Main.Money.Amount.Text:match("%$([%d,]+)")
-                            New_Balance = New_Balance:gsub(",", "")
-                            New_Balance = tonumber(New_Balance)
-
-                            for Index = 1, Times_Deposited do
-                                New_Balance+=500000
-                            end
-
-                            local PlusOrMinus = New_Balance >= tonumber(Start_Balance) and "+ " or "- "
-                            local Number = New_Balance - tonumber(Start_Balance)
-
-                            local Color = Number >= 0 and "#4CAF50" or "#F44336"
-
-                            Money_Gained_Label:SetText(string.format(
-                                "Money Gained | <font color='%s'>%s%s</font>",
-                                Color,
-                                PlusOrMinus,
-                                Format_Money(math.abs(Number))
-                            ))
-                        end)
-                    end
-                end))
-
-                local Rejoin_Section = Subpages.Money:Section({Name = "Rejoiner Settings", Icon = '137623872962804', Side = 2})
-
-                Rejoin_Section:Label("This will rejoin if you die while farming marshmallows, everything is recommended on.")
-
-                local Rejoin_Enabled = string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' enabled ') ~= nil
-                local KillAura_Enabled = string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' killaura ') ~= nil
-                local AutoBuyGun_Enabled = string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' autobuygun ') ~= nil
-                    
-                Rejoin_Section:Toggle({Name = "Enabled", Flag = tostring(math.random(1, 9e8)), Default = Rejoin_Enabled, Callback = function(State)
-                    Config.Rejoiner.Enabled = State
-                    
-                    if State then
-                        if not string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' enabled ') then
-                            local file_data = readfile("ValaryGG_RejoinerSettings.txt")
-                            writefile('ValaryGG_RejoinerSettings.txt', file_data..' enabled ')
-                        end
-                    else
-                        if string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' enabled ') then
-                            local file_data = readfile("ValaryGG_RejoinerSettings.txt")
-                            file_data = file_data:gsub(' enabled ', '')
-
-                            writefile('ValaryGG_RejoinerSettings.txt', file_data)
-                        end
-                    end
-                end})
-
-                --[[Rejoin_Section:Toggle({Name = "Auto-Buy Guns", Flag = tostring(math.random(1, 9e8)), Default = AutoBuyGun_Enabled, Callback = function(State)
-                    Config.Rejoiner.AutoBuyGun = State
-
-                    if State then
-                        if not string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' autobuygun ') then
-                            local file_data = readfile("ValaryGG_RejoinerSettings.txt")
-                            writefile('ValaryGG_RejoinerSettings.txt', file_data..' autobuygun ')
-                        end
-                    else
-                        if string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' autobuygun ') then
-                            local file_data = readfile("ValaryGG_RejoinerSettings.txt")
-                            file_data = file_data:gsub(' autobuygun ', '')
-
-                            writefile('ValaryGG_RejoinerSettings.txt', file_data)
-                        end
-                    end
-                end})
-
-                Rejoin_Section:Toggle({Name = "Auto-Enable Kill Aura", Flag = tostring(math.random(1, 9e8)), Default = KillAura_Enabled, Tooltip = "This will be set to 150 studs.", Callback = function(State)
-                    Config.Rejoiner.KillAura = State
-
-                    if State then
-                        if not string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' killaura ') then
-                            local file_data = readfile("ValaryGG_RejoinerSettings.txt")
-                            writefile('ValaryGG_RejoinerSettings.txt', file_data..' killaura ')
-                        end
-                    else
-                        if string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' killaura ') then
-                            local file_data = readfile("ValaryGG_RejoinerSettings.txt")
-                            file_data = file_data:gsub(' killaura ', '')
-
-                            writefile('ValaryGG_RejoinerSettings.txt', file_data)
-                        end
-                    end
-                end})]]
-
-                local Battery_Saver = Subpages.Money:Section({Name = "Performance Saver", Icon = Library:GetImage("Battery"), Side = 2})
-
-                local BatteryToggle_Loaded = false;
-
-                Battery_Saver:Toggle({Name = "Enabled", Flag = "SouthBronx/BatterySaver", Tooltip = "This will disable 3D rendering and cap your frames per second to 15.\nUseful if your trying to play other games / run multiple clients.", Callback = function(State)
-                    if not BatteryToggle_Loaded then return end
-
-                    if not State then
-                        setfpscap(1000)
-                        RunService:Set3dRenderingEnabled(true)
-                    end
-                end})
-
-                task.spawn(LPH_NO_VIRTUALIZE(function()
-                    while true do
-                        task.wait(1)
-
-                        if Library.Flags["SouthBronx/BatterySaver"] then
-                            setfpscap(15)
-                            RunService:Set3dRenderingEnabled(false)
-                        end
-                    end
-                end))
-
-                BatteryToggle_Loaded = true
+                end
             end
         end
 
@@ -18192,7 +15361,7 @@ do
             do -- Configs
                 local ConfigsSection = Subpages["Configs"]:Section({Name = "profiles", Icon = "96491224522405", Side = 1})
                 local AutoloadSection = Subpages["Configs"]:Section({Name = "autoload", Icon = "137623872962804", Side = 2})
-                local Server_Section = Subpages["Configs"]:Section({Name = "server hopper", Icon = "93007870315593", Side = 2})
+                local ServerSection = Subpages["Configs"]:Section({Name = "servers", Icon = Library:GetImage("Servers"), Side = 2})
 
                 local ConfigSelected 
                 local ConfigName
@@ -18295,6 +15464,15 @@ do
 
                 do
                     AutoloadSection:Button({
+                        Name = "set selected config as autoload",
+                        Callback = function()
+                            if ConfigSelected then 
+                                writefile(Library.Folders.Directory .. "/AutoLoadConfig (do not modify this).json", readfile(Library.Folders.Configs .. "/" .. ConfigSelected))
+                            end
+                        end
+                    })
+
+                    AutoloadSection:Button({
                         Name = "set current config as autoload",
                         Callback = function()
                             if ConfigSelected then 
@@ -18310,137 +15488,57 @@ do
                         end
                     })
                 end
+                
+                do
+                    ServerSection:Button({Name = "rejoin server", Callback = function()
+                        Services.TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
+                    end})
 
-                if not isfile("ValaryGG_ServerAmount.txt") then
-                    writefile("ValaryGG_ServerAmount.txt", "5")
+                    ServerSection:Button({Name = "server hop", Callback = function()
+                        local Servers = {}
+                        local Request = request({Url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100&excludeFullGames=true", tostring(game.PlaceId))})
+                        local Body = Services.HttpService:JSONDecode(Request.Body)
+                
+                        if Body and Body.data then
+                            for _, Value in next, Body.data do
+                                if type(Value) == "table" and tonumber(Value.playing) and tonumber(Value.maxPlayers) and Value.playing < Value.maxPlayers and Value.id ~= game.JobId then
+                                    table.insert(Servers, 1, Value.id)
+                                end
+                            end
+                        end
+                
+                        Services.TeleportService:TeleportToPlaceInstance(game.PlaceId, Servers[math.random(1, #Servers)])
+                    end})
+
+                    ServerSection:Button({Name = "join lowest server", Callback = function()
+                        local Servers = string.format("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100", tostring(game.PlaceId))
+                
+                        local ListServers = function(cursor)
+                            local Raw = game:HttpGet(Servers .. ((cursor and "&cursor="..cursor) or ""))
+                            return Services.HttpService:JSONDecode(Raw)
+                        end
+                
+                        local Server, Next; repeat
+                            local Servers = ListServers(Next)
+                            Server = Servers.data[1]
+                            Next = Servers.nextPageCursor
+                        until Server
+                
+                        if Server.id == game.JobId then
+                            Library:Notification({
+                                Name = "Valary.gg | Servers",
+                                Description = "You are currently in the smallest server!",
+                                Duration = 5,
+                                Icon = "97118059177470",
+                                IconColor = Color3.fromRGB(255, 120, 120)
+                            })
+
+                            return  
+                        end 
+                        
+                        Services.TeleportService:TeleportToPlaceInstance(game.PlaceId, Server.id)
+                    end})
                 end
-
-                Server_Section:Label("note : this hops servers to try find one with low players, this can take up to 10 minutes.")
-
-                Server_Section:Slider({
-                    Name = "max amount of players in server",
-                    Flag = "SouthBronx/ServerHopper/MaxPlayers",
-                    Default = tonumber(readfile("ValaryGG_ServerAmount.txt")),
-                    Min = 1,
-                    Max = 25,
-                    Decimals = 1,
-                    Callback = function(Value)
-                        writefile("ValaryGG_ServerAmount.txt", tostring(Value))
-                    end
-                })
-
-                Server_Section:Button({Name = "start server hopping", Callback = function()
-                    local Source = [[
-                        queue_on_teleport(readfile("Valary_ServerHop.txt"))
-
-                        game.Loaded:Wait()
-                        task.wait(1)
-
-                        if game.PlaceId == 10179538382 then return end
-
-                        if #game.Players:GetPlayers() <= tonumber(readfile("ValaryGG_ServerAmount.txt")) then 
-                            if isfile("Valary_ServerHop.txt") then
-                                delfile("Valary_ServerHop.txt")
-                            end
-
-                            writefile("valary/Assets/ServerFound.mp3", game:HttpGet("https://raw.githubusercontent.com/ValarySoftworks/Assets/refs/heads/main/ServerFound.mp3?raw=true"))
-                            local Sound = Instance.new("Sound", workspace)
-                            Sound.SoundId = getcustomasset("valary/Assets/ServerFound.mp3")
-                            Sound.Volume = 10000
-                            Sound:Play()
-
-                            return 
-                        end
-
-                        task.wait(2)
-
-                        local VirtualInputManager = Instance.new("VirtualInputManager", nil)
-
-                        for Index, Value in game:GetService("Players"):GetPlayers() do
-                            if Value ~= game:GetService("Players").LocalPlayer then
-                                game:GetService("StarterGui"):SetCore("PromptBlockPlayer", Value)
-
-                                local Start = tick()
-
-                                repeat 
-                                    task.wait()
-                                until game:GetService("CoreGui"):FindFirstChild("BlockingModalScreen") or tick() - Start >= 1.5
-
-                                if tick() - Start < 1.5 then
-                                    break
-                                end
-                            end
-                        end
-
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Up, false, game)
-                        task.wait(0.5)
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Up, false, game)
-
-                        task.wait(1)
-
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                        task.wait(0.5)
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-
-                        task.wait(1)
-
-                        if #game:GetService("StarterGui"):GetCore("GetBlockedUserIds") == 0 then
-                            repeat task.wait(10)
-                                for Index, Value in game:GetService("Players"):GetPlayers() do
-                                    if Value ~= game:GetService("Players").LocalPlayer then
-                                        game:GetService("StarterGui"):SetCore("PromptBlockPlayer", Value)
-
-                                        local Start = tick()
-
-                                        repeat 
-                                            task.wait()
-                                        until game:GetService("CoreGui"):FindFirstChild("BlockingModalScreen") or tick() - Start >= 1.5
-
-                                        if tick() - Start < 1.5 then
-                                            break
-                                        end
-                                    end
-                                end
-
-                                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Up, false, game)
-                                task.wait(0.5)
-                                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Up, false, game)
-
-                                task.wait(1)
-
-                                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                                task.wait(0.5)
-                                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-
-                                task.wait(1)
-                            until #game:GetService("StarterGui"):GetCore("GetBlockedUserIds") > 0
-                        end
-
-                        game:GetService("TeleportService"):Teleport(10179538382, game:GetService("Players").LocalPlayer)
-                    ]]
-
-                    writefile("Valary_ServerHop.txt", Source)
-
-                    queue_on_teleport(Source)
-
-                    game:GetService("TeleportService"):Teleport(10179538382)
-                end})
-
-                Server_Section:Button({Name = "join console server", Callback = function()
-                    queue_on_teleport([[
-                        __namecall = nil
-                        __namecall = hookmetamethod(game, '__namecall', newcclosure(function(Self, ...)
-
-                            if getnamecallmethod() == 'IsTenFootInterface' then
-                                return true
-                            end
-
-                            return __namecall(Self, ...)
-                        end))
-                    ]])
-
-                    game:GetService('TeleportService'):Teleport(10179538382)
-                end, Tooltip = "These servers have no anti-cheat, making farming incredibly fast!"})
             end
 
             do -- Configuration
@@ -18477,7 +15575,7 @@ do
                             Watermark:SetVisibility(Value)
                         end
                     })
-                
+
                     GlobalChat_Toggle = MenuSection:Toggle({
                         Name = "global chat",
                         Flag = "global chat",
@@ -18491,6 +15589,7 @@ do
                         Name = "unload",
                         Callback = function()
                             Library:Unload()
+                            Esp.Unload()
                         end
                     })
                 end
@@ -18535,40 +15634,27 @@ do
     end
 end
 
-if hookfunction then
-    local _FireServer;
-    local Lights_FE;
-    local InflictTarget;
+if hookfunction and LPH_OBFUSCATED then
+    --[[local _FireServer;
+    local _Function;
 
     _FireServer = hookfunction(Instance.new("RemoteEvent", nil).FireServer, LPH_NO_UPVALUES(function(self, ...)
         local Arguments = {...}
 
         if tostring(self) == "Lights_FE" then
             local f, s = debug.getinfo(2, "fs")
-            if not Lights_FE then
-                Lights_FE = f.func
+            if not _Function then
+                _Function = f.func
             end
 
-            if Lights_FE ~= f.func then
+            if _Function ~= f.func then
                 while true do end
                 return
             end
-        elseif tostring(self) == "InflictTarget" then
-            local f, s = debug.getinfo(2, "fs")
-            if not InflictTarget then
-                InflictTarget = f.func
-            end
-
-            if InflictTarget ~= f.func then
-                while true do end
-                return
-            end
-        else
-            return _FireServer(self, ...)
         end
 
         return _FireServer(self, ...)
-    end))
+    end))]]
 end
 
 if LPH_OBFUSCATED then
@@ -18585,7 +15671,7 @@ if LPH_OBFUSCATED then
     end))
 end
 
-if not Device_Mobile then
+if not UserInputService.TouchEnabled then
     RunService:BindToRenderStep("UI_Mouse_Fixer", 400, LPH_NO_VIRTUALIZE(function()
         if Window.IsOpen and not UserInputService.MouseIconEnabled then
             UserInputService.MouseIconEnabled = true
@@ -18605,26 +15691,5 @@ Library:Notification({
 
 Library:Init() -- put this at the end of ur script or the autoload will not work
 
-if getgenv().rejoined_and_farming then
-    local Rejoin_Enabled = string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' enabled ') ~= nil
-    local KillAura_Enabled = string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' killaura ') ~= nil
-    local AutoBuyGun_Enabled = string.find(readfile("ValaryGG_RejoinerSettings.txt"), ' autobuygun ') ~= nil
-
-    --[[if KillAura_Enabled then
-        KillAura_Range:Set(150)
-        KillAura_Toggle:Set(true)
-    end
-
-    if AutoBuyGun_Enabled then
-        AutoBuyGunToggle:Set(true)
-        task.wait(.1)
-        Buy_Gun()
-    end]]
-
-    task.wait(3)
-
-    FarmMarshmallows_Toggle:Set(true)
-end
-
-getgenv().Library = Library 
-return Library
+getgenv().Library = Library
+return Library  
