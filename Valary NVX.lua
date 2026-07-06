@@ -929,7 +929,7 @@ end
                 LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Phone"))
             end
 
-            local nan, Start = tonumber("nan"), tick()
+            local Start = tick()
 
             repeat
                 RunService.Stepped:Wait()
@@ -939,7 +939,7 @@ end
                     continue
                 end
 
-                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(nan,nan,nan)
+                -- Removed NaN assignment (was causing crash)
             until tick() - Start >= 0.5
 
             Start = tick()
@@ -1090,7 +1090,7 @@ end
                 LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Phone"))
             end
 
-            local nan, Start = tonumber("nan"), tick()
+            local Start = tick()
 
             repeat
                 RunService.Stepped:Wait()
@@ -1100,7 +1100,7 @@ end
                     continue
                 end
 
-                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(nan,nan,nan)
+                -- Removed NaN assignment (was causing crash)
             until tick() - Start >= 0.5
 
             Start = tick()
