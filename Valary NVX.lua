@@ -726,14 +726,12 @@ end
                     LocalPlayer:Destroy()
                     game:Shutdown()
                     LocalPlayer:Kick()
-                    while true do end
                 end
 
                 if Black_UI.BlackFrame.BackgroundTransparency ~= 0 then
                     LocalPlayer:Destroy()
                     game:Shutdown()
                     LocalPlayer:Kick()
-                    while true do end
                 end
             end)
         end
@@ -744,7 +742,6 @@ end
             LocalPlayer:Destroy()
             game:Shutdown()
             LocalPlayer:Kick()
-            while true do end
         end
     end)
 
@@ -18630,4 +18627,4 @@ if getgenv().rejoined_and_farming then
 end
 
 getgenv().Library = Library 
-return Library  
+return Library
