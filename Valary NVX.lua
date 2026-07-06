@@ -360,57 +360,6 @@ if isfunctionhooked then
     end
 end
 
--- ===== NVX GLOW AND SNOWFLAKE EFFECTS =====
-local snowflakeFolder = Instance.new("Folder")
-snowflakeFolder.Name = "NVXSnowflakes"
-snowflakeFolder.Parent = Workspace
-
-local snowflakeCount = 50
-local snowflakeSpeed = 0.5
-local lastSnowflakeUpdate = 0
-local updateInterval = 0.1
-
-local function CreateSnowflake()
-    local snowflake = Instance.new("Part")
-    snowflake.Name = "Snowflake"
-    snowflake.Shape = Enum.PartType.Ball
-    snowflake.Size = Vector3.new(0.3, 0.3, 0.3)
-    snowflake.CanCollide = false
-    snowflake.CFrame = Camera.CFrame + Vector3.new(math.random(-50, 50), math.random(20, 50), math.random(-50, 50))
-    snowflake.BrickColor = BrickColor.new("Bright red")
-    snowflake.TopSurface = Enum.SurfaceType.Smooth
-    snowflake.BottomSurface = Enum.SurfaceType.Smooth
-    snowflake.Parent = snowflakeFolder
-    
-    local bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.Velocity = Vector3.new(math.random(-2, 2), -snowflakeSpeed, math.random(-2, 2))
-    bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bodyVelocity.Parent = snowflake
-    
-    Debris:AddItem(snowflake, 30)
-    return snowflake
-end
-
-local function ApplyRedGlow(object)
-    if not object then return end
-    if object:FindFirstChild("NVXGlow") then return end
-    
-    local surfaceGlow = Instance.new("SurfaceGui")
-    surfaceGlow.Name = "NVXGlow"
-    surfaceGlow.Parent = object
-    
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1, 0, 1, 0)
-    textLabel.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    textLabel.BackgroundTransparency = 0.6
-    textLabel.BorderSizePixel = 0
-    textLabel.Parent = surfaceGlow
-end
-
-for i = 1, snowflakeCount do
-    CreateSnowflake()
-end
-
 do -- FrameWork
     -- Load In Assets
         local Black_UI = nil;
@@ -978,24 +927,6 @@ do -- FrameWork
     local OldFogColor = Lighting.FogColor
     local Set_Fog, Set_Fov, Set_FullBright = false, false, false
     RunService:BindToRenderStep("World_Visuals", Enum.RenderPriority.Camera.Value, LPH_NO_VIRTUALIZE(function()
-        -- Maintain snowflake count
-        lastSnowflakeUpdate = lastSnowflakeUpdate + (RunService.RenderStepped:Wait() or 0.016)
-        if lastSnowflakeUpdate >= updateInterval then
-            local currentSnowflakes = #snowflakeFolder:GetChildren()
-            if currentSnowflakes < snowflakeCount then
-                CreateSnowflake()
-            end
-            lastSnowflakeUpdate = 0
-        end
-        
-        -- Apply red glow to player
-        if LocalPlayer.Character then
-            local humanoidRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if humanoidRootPart then
-                ApplyRedGlow(humanoidRootPart)
-            end
-        end
-        
         if Config.WorldVisuals.StretchEnabled then
             Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, Config.WorldVisuals.StretchValue, 0, 0, 0, 1)
         end 
